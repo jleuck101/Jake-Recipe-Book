@@ -121,6 +121,35 @@
       gap:10px;
       align-items:end;
     }
+    /* Advanced filters dropdown */
+.adv{
+  grid-column: 1 / -1;
+  border:1px solid var(--line);
+  background:rgba(18,20,27,.55);
+  border-radius:16px;
+  padding:10px 12px;
+}
+.adv > summary{
+  cursor:pointer;
+  font-weight:900;
+  list-style:none;
+  user-select:none;
+}
+.adv > summary::-webkit-details-marker{ display:none; }
+.advGrid{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0,1fr));
+  gap:10px;
+  align-items:end;
+}
+@media(max-width:980px){
+  .advGrid{ grid-template-columns: 1fr 1fr; }
+}
+@media(max-width:520px){
+  .advGrid{ grid-template-columns: 1fr; }
+}
+
     @media(max-width:980px){
       .filters{grid-template-columns:1fr 1fr; }
     }
@@ -387,24 +416,48 @@
 </header>
 
 <main class="main">
-  <div class="filters">
-    <div>
-      <div class="k">Search</div>
-      <input id="q" placeholder="Search title, ingredients, directions, tags…" />
-    </div>
-    <div>
-      <div class="k">Cuisine</div>
-      <select id="cuisineF"><option value="">Any</option></select>
-    </div>
-    <div>
-      <div class="k">Appliance</div>
-      <select id="applianceF"><option value="">Any</option></select>
-    </div>
-    <div>
-      <div class="k">Max time (min)</div>
-      <input id="maxTime" type="number" min="0" step="5" placeholder="e.g. 30" />
-    </div>
+<div class="filters">
+  <div>
+    <div class="k">Search</div>
+    <input id="q" placeholder="Search title, ingredients, directions, tags…" />
   </div>
+
+  <div>
+    <div class="k">Max time (min)</div>
+    <input id="maxTime" type="number" min="0" step="5" placeholder="e.g. 30" />
+  </div>
+
+  <details class="adv" id="advFilters">
+    <summary>Advanced filters</summary>
+    <div class="advGrid">
+      <div>
+        <div class="k">Cuisine</div>
+        <select id="cuisineF"><option value="">Any</option></select>
+      </div>
+
+      <div>
+        <div class="k">Method</div>
+        <select id="applianceF"><option value="">Any</option></select>
+      </div>
+
+      <div>
+        <div class="k">Course</div>
+        <select id="courseF"><option value="">Any</option></select>
+      </div>
+
+      <div>
+        <div class="k">Main ingredient</div>
+        <select id="ingredientF"><option value="">Any</option></select>
+      </div>
+
+      <div>
+        <div class="k">Tag</div>
+        <select id="tagF"><option value="">Any</option></select>
+      </div>
+    </div>
+  </details>
+</div>
+
 
   <div class="galleryTop">
     <div class="seg">
@@ -531,40 +584,53 @@
           </div>
         </div>
 
-        <div class="two" style="margin-top:10px;">
-          <div>
-            <div class="k">Appliances (comma)</div>
-            <input id="eAppliances" placeholder="instant pot, oven"/>
-          </div>
-          <div>
-            <div class="k">Time (minutes)</div>
-            <input id="eTime" type="number" min="0" step="5" placeholder="30"/>
-          </div>
-        </div>
+<div class="two" style="margin-top:10px;">
+  <div>
+    <div class="k">Course</div>
+    <input id="eCourse" placeholder="Breakfast, dessert, snack…" autocomplete="off"/>
+    <div class="suggestRow" id="courseSuggestions"></div>
+  </div>
+  <div>
+    <div class="k">Main ingredient / protein</div>
+    <input id="eIngredient" placeholder="chicken, tofu, beans…" autocomplete="off"/>
+    <div class="suggestRow" id="ingredientSuggestions"></div>
+  </div>
+</div>
 
-        <div class="two" style="margin-top:10px;">
-          <div>
-            <div class="k">Dishes created</div>
-            <input id="eDishes" type="number" min="0" step="1" placeholder="2"/>
-          </div>
-          <div>
-            <div class="k">Tags (comma)</div>
-<input id="eTags" placeholder="weeknight, spicy, instant pot" autocomplete="off"/>
-<div class="suggestRow" id="tagSuggestions"></div>
+<div class="two" style="margin-top:10px;">
+  <div>
+    <div class="k">Methods (comma)</div>
+    <input id="eAppliances" placeholder="instant pot, oven"/>
+  </div>
+  <div>
+    <div class="k">Time (minutes)</div>
+    <input id="eTime" type="number" min="0" step="5" placeholder="30"/>
+  </div>
+</div>
 
-          </div>
-        </div>
+<div class="two" style="margin-top:10px;">
+  <div>
+    <div class="k">Dishes created</div>
+    <input id="eDishes" type="number" min="0" step="1" placeholder="2"/>
+  </div>
+  <div>
+    <div class="k">Tags (comma)</div>
+    <input id="eTags" placeholder="weeknight, spicy, instant pot" autocomplete="off"/>
+    <div class="suggestRow" id="tagSuggestions"></div>
+  </div>
+</div>
 
-        <div class="two" style="margin-top:10px;">
-          <div>
-            <div class="k">Cooked count (editable)</div>
-            <input id="eCookedCount" type="number" min="0" step="1" placeholder="0"/>
-          </div>
-          <div>
-            <div class="k">Servings</div>
-            <input id="eServings" placeholder="yields 4"/>
-          </div>
-        </div>
+<div class="two" style="margin-top:10px;">
+  <div>
+    <div class="k">Cooked count (editable)</div>
+    <input id="eCookedCount" type="number" min="0" step="1" placeholder="0"/>
+  </div>
+  <div>
+    <div class="k">Servings</div>
+    <input id="eServings" placeholder="yields 4"/>
+  </div>
+</div>
+
 
         <div style="margin-top:10px;">
           <div class="k">Image path</div>
@@ -971,6 +1037,8 @@ function saveLocal(opts={}){
       id: r.id || uid(),
       title: r.title || "(untitled)",
       cuisine: r.cuisine || "",
+      course: r.course || "",
+      mainIngredient: r.mainIngredient || "",
       appliances: Array.isArray(r.appliances) ? r.appliances : [],
       timeMinutes: (typeof r.timeMinutes === "number") ? r.timeMinutes : (r.timeMinutes ? Number(r.timeMinutes) : null),
       dishesCount: (typeof r.dishesCount === "number") ? r.dishesCount : (r.dishesCount ? Number(r.dishesCount) : null),
@@ -992,35 +1060,61 @@ function saveLocal(opts={}){
     const cuisines = Array.from(new Set(state.recipes.map(r => (r.cuisine||"").trim()).filter(Boolean))).sort();
     const appliances = Array.from(new Set(state.recipes.flatMap(r => r.appliances||[]))).sort();
 
+    const courses = Array.from(new Set(state.recipes.map(r => (r.course||"").trim()).filter(Boolean))).sort();
+    const ingredients = Array.from(new Set(state.recipes.map(r => (r.mainIngredient||"").trim()).filter(Boolean))).sort();
+    const tags = Array.from(new Set(state.recipes.flatMap(r => r.tags||[]).map(t=>String(t||"").trim()).filter(Boolean))).sort();
+
     const c = $("cuisineF"), a = $("applianceF");
-    const cv=c.value,av=a.value;
-    c.innerHTML = `<option value="">Any</option>` + cuisines.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
-    a.innerHTML = `<option value="">Any</option>` + appliances.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
-    if(cuisines.includes(cv)) c.value=cv;
-    if(appliances.includes(av)) a.value=av;
+    const co = $("courseF"), ing = $("ingredientF"), tag = $("tagF");
+
+    const cv=c?.value||"", av=a?.value||"", cov=co?.value||"", ingv=ing?.value||"", tagv=tag?.value||"";
+
+    if(c) c.innerHTML = `<option value="">Any</option>` + cuisines.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
+    if(a) a.innerHTML = `<option value="">Any</option>` + appliances.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
+    if(co) co.innerHTML = `<option value="">Any</option>` + courses.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
+    if(ing) ing.innerHTML = `<option value="">Any</option>` + ingredients.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
+    if(tag) tag.innerHTML = `<option value="">Any</option>` + tags.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
+
+    if(c && cuisines.includes(cv)) c.value=cv;
+    if(a && appliances.includes(av)) a.value=av;
+    if(co && courses.includes(cov)) co.value=cov;
+    if(ing && ingredients.includes(ingv)) ing.value=ingv;
+    if(tag && tags.includes(tagv)) tag.value=tagv;
   }
+
 
   function hay(r){
     return [
-      r.title, r.cuisine,
+      r.title, r.cuisine, r.course, r.mainIngredient,
       (r.appliances||[]).join(" "),
       (r.tags||[]).join(" "),
       r.ingredients, r.directions, r.notes
     ].join("\n").toLowerCase();
   }
 
+
   function filtered(){
     const q = $("q").value.trim().toLowerCase();
-    const cuisine = $("cuisineF").value;
-    const appliance = $("applianceF").value;
+    const cuisine = $("cuisineF")?.value || "";
+    const appliance = $("applianceF")?.value || "";
+    const course = $("courseF")?.value || "";
+    const ingredient = $("ingredientF")?.value || "";
+    const tag = $("tagF")?.value || "";
     const maxTime = Number($("maxTime").value||0);
+
 
     let out = state.recipes.filter(r=>{
       if(cuisine && (r.cuisine||"").trim()!==cuisine) return false;
       if(appliance && !(r.appliances||[]).includes(appliance)) return false;
+
+      if(course && (r.course||"").trim()!==course) return false;
+      if(ingredient && (r.mainIngredient||"").trim()!==ingredient) return false;
+      if(tag && !(r.tags||[]).includes(tag)) return false;
+
       if(maxTime>0 && Number(r.timeMinutes||0)>maxTime) return false;
       if(q && !hay(r).includes(q)) return false;
       return true;
+
     });
 
     const sort = $("sort").value;
@@ -1462,7 +1556,10 @@ function parseFirstNumberAnywhere(text){
     // Quick info pills
     const info = $("vInfo");
     info.innerHTML = "";
-    if((r.appliances||[]).length) info.appendChild(pill("appliances: " + r.appliances.join(", ")));
+    if(r.course) info.appendChild(pill("course: " + r.course));
+    if(r.mainIngredient) info.appendChild(pill("ingredient: " + r.mainIngredient));
+    if((r.appliances||[]).length) info.appendChild(pill("method: " + r.appliances.join(", ")));
+
     if(r.dishesCount != null) info.appendChild(pill("dishes: " + r.dishesCount));
     if((r.tags||[]).length) info.appendChild(pill("tags: " + r.tags.join(", ")));
     if((r.cookedCount||0)>0) info.appendChild(pill("cooked: " + r.cookedCount));
@@ -1526,6 +1623,8 @@ function parseFirstNumberAnywhere(text){
   function fillEditForm(r){
     $("eTitle").value = r.title || "";
     $("eCuisine").value = r.cuisine || "";
+    $("eCourse").value = r.course || "";
+    $("eIngredient").value = r.mainIngredient || "";
     $("eAppliances").value = (r.appliances||[]).join(", ");
     $("eTime").value = r.timeMinutes ?? "";
     $("eDishes").value = r.dishesCount ?? "";
@@ -1576,6 +1675,8 @@ function parseFirstNumberAnywhere(text){
       ...state.recipes[idx],
       title: ($("eTitle").value.trim() || "(untitled)"),
       cuisine: $("eCuisine").value.trim(),
+      course: $("eCourse").value.trim(),
+      mainIngredient: $("eIngredient").value.trim(),
       appliances: normalizeList($("eAppliances").value.toLowerCase()),
       timeMinutes: $("eTime").value ? Number($("eTime").value) : null,
       dishesCount: $("eDishes").value ? Number($("eDishes").value) : null,
@@ -1650,6 +1751,8 @@ function parseFirstNumberAnywhere(text){
       id: uid(),
       title: "New Recipe",
       cuisine: "",
+      course: "",
+      mainIngredient: "",
       appliances: [],
       timeMinutes: null,
       dishesCount: null,
@@ -2129,7 +2232,7 @@ if(window.FB && window.FB.enabled){
 
 
     // Hook filters
-    ["q","cuisineF","applianceF","maxTime","sort"].forEach(id=>{
+    ["q","cuisineF","applianceF","courseF","ingredientF","tagF","maxTime","sort"].forEach(id=>{
       $(id).addEventListener("input", renderGrid);
       $(id).addEventListener("change", renderGrid);
     });
