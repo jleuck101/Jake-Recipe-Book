@@ -244,6 +244,29 @@
     }
     .dot{width:8px;height:8px;border-radius:999px;background:rgba(34,197,94,.9);display:inline-block}
 
+    /* Tiny sync badge */
+.syncPill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.04);
+  font-size:12px;
+  font-weight:850;
+  line-height:1.4;
+}
+.syncDot{
+  width:8px;height:8px;border-radius:999px;
+  background:rgba(148,163,184,.95); /* default: gray */
+  display:inline-block;
+}
+.syncPill.ok .syncDot{ background:rgba(34,197,94,.95); }
+.syncPill.warn .syncDot{ background:rgba(245,158,11,.95); }
+.syncPill.bad  .syncDot{ background:rgba(239,68,68,.95); }
+
+
     /* Viewer modal (full screen on mobile) */
     .overlay{
       position:fixed; inset:0;
@@ -448,7 +471,7 @@ body.gated #loginGate { display:flex !important; }
       <div>
         <h1>Jake's Recipe Vault</h1>
         <div class="hint">
-          Big-photo gallery • Tap a recipe to open a clean cooking view • <span id="cloud"></span> <span id="status"></span>
+          Big-photo gallery • Tap a recipe to open a clean cooking view • <span id="cloud"></span> • <span id="syncBadge" class="syncPill">Signed out</span> <span id="status"></span>
         </div>
       </div>
       <div id="headerControls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -457,8 +480,15 @@ body.gated #loginGate { display:flex !important; }
           <div class="advPanel">
             <button class="btn" id="backupBtn">Backup</button>
             <button class="btn" id="restoreBtn">Restore</button>
-            <button class="btn ok" id="pushCloudBtn" title="Overwrite cloud with this device's current recipes">Push to cloud</button>
+          
+            <button class="btn ok" id="pushCloudBtn"
+              title="Use ONLY if you intentionally want this device to overwrite the cloud copy (e.g., recovery).">
+              Push to cloud
+            </button>
+          
+            <button class="btn danger" id="signOutBtn">Sign out</button>
           </div>
+          
         </details>
         
         <button class="btn primary" id="newBtn">+ New</button>
@@ -473,7 +503,9 @@ body.gated #loginGate { display:flex !important; }
 <div id="loginGate" style="display:none;min-height:calc(100vh - 60px);align-items:center;justify-content:center;text-align:center;padding:28px">
   <div style="max-width:520px">
     <h2 style="margin:0 0 8px;font-size:24px;letter-spacing:.2px">Jake's Recipe Vault</h2>
-    <div class="hint" style="margin:0 0 14px">Sign in to view and edit recipes.</div>
+    <div class="hint" style="margin:0 0 10px">Sign in to view and edit recipes.</div>
+<div class="hint" style="margin:0 0 14px">First sign-in on a new device requires internet. After that, this device can work offline.</div>
+
     <div id="loginGateBtnHost" style="display:flex;justify-content:center"></div>
   </div>
 </div>
@@ -770,8 +802,10 @@ body.gated #loginGate { display:flex !important; }
   browserLocalPersistence,
   GoogleAuthProvider,
   signInWithPopup,
-  onAuthStateChanged
+  onAuthStateChanged,
+  signOut
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+
 
 
   const firebaseConfig = {
@@ -841,14 +875,20 @@ function renderAuthButton(){
   if(host) host.appendChild(btn);
 
   btn.onclick = async ()=>{
-    try{
-      await signInWithPopup(auth, provider);
-      // no reload needed; onAuthStateChanged will fire and the app will swap in
-    }catch(e){
-      console.error("Google sign-in failed:", e);
-      alert("Sign-in failed. Check console (popup blocked or domain not authorized).");
-    }
-  };
+  // First-time sign-in requires internet
+  if(!navigator.onLine){
+    alert("You're offline. Connect to the internet once to sign in on this device.");
+    return;
+  }
+
+  try{
+    await signInWithPopup(auth, provider);
+    // No refresh needed; onAuthStateChanged will fire and the app will swap in
+  }catch(e){
+    console.error("Google sign-in failed:", e);
+    alert("Sign-in failed. If this keeps happening, allow popups for this site and check Firebase Authorized Domains.");
+  }
+};
 }
 
 
@@ -867,6 +907,11 @@ onAuthStateChanged(auth, (user)=>{
 // Expose auth state to the non-module script
 window._authInit = _authInit;
 window._getCurrentUser = () => _currentUser;
+
+window.AUTH = {
+  signOut: () => signOut(auth)
+};
+
 
 
 
@@ -921,7 +966,6 @@ window._getCurrentUser = () => _currentUser;
 
 <script>
 
-  const SITE_JSON = "./recipes.json";
   const LS_KEY = "recipe_vault_data_v3_gallery";
   const CHECKS_PREFIX = "rv_ing_checks_v1:"; // per-recipe checkbox state
 
@@ -933,6 +977,12 @@ window._getCurrentUser = () => _currentUser;
   function setGate(on){
   document.body.classList.toggle("gated", !!on);
 }
+
+window._doSignOut = async ()=> {
+  await (window.AUTH?.signOut?.());
+};
+
+
 
   function waitForFB(timeoutMs = 4000){
   if(window.FB && window.FB.enabled) return Promise.resolve(true);
@@ -1213,14 +1263,44 @@ function refreshEditSuggestions(){
   function setStatus(msg){ $("status").textContent = msg ? ("— " + msg) : ""; }
   function toast(msg){ setStatus(msg); setTimeout(()=>setStatus(""), 1200); }
 
-  function setCloudStatus(){
+  function setSyncBadge(mode, text){
+  const el = $("syncBadge");
+  if(!el) return;
+
+  // mode: "ok" | "warn" | "bad" | "" (neutral)
+  el.classList.remove("ok","warn","bad");
+  if(mode) el.classList.add(mode);
+
+  const label = text || "";
+  el.innerHTML = `<span class="syncDot"></span>${escapeHtml(label)}`;
+}
+
+function setCloudStatus(){
   const el = $("cloud");
   if(!el) return;
+
   const on = !!(window.FB && window.FB.enabled);
   el.textContent = on
     ? `cloud: yes • recipes: ${state.recipes.length}`
     : `cloud: no • recipes: ${state.recipes.length}`;
+
+  // Update badge from current conditions
+  const user = window._getCurrentUser ? window._getCurrentUser() : null;
+
+  if(!user){
+    setSyncBadge("", "Signed out");
+    return;
+  }
+
+  if(!navigator.onLine){
+    setSyncBadge("warn", "Offline (using cache)");
+    return;
+  }
+
+  // default signed-in online state
+  setSyncBadge("ok", "Synced");
 }
+
 
 
 
@@ -1248,22 +1328,37 @@ function refreshEditSuggestions(){
     snackTimer = null;
   }
 
-let fbSyncTimer = null;
+  let fbSyncTimer = null;
+let lastSyncAt = 0;
 
 function scheduleFirebaseSync(){
   if(!window.FB || !window.FB.enabled) return;
+
+  const user = window._getCurrentUser ? window._getCurrentUser() : null;
+  if(!user) return;
+  if(!navigator.onLine) return;
+
   if(fbSyncTimer) clearTimeout(fbSyncTimer);
+
+  // show "syncing" quickly after an edit
+  setSyncBadge("warn", "Syncing…");
 
   fbSyncTimer = setTimeout(async ()=>{
     try{
       await window.FB.syncAll(state.recipes);
-      // keep it quiet (no toast spam)
+      lastSyncAt = Date.now();
+      setSyncBadge("ok", "Synced");
+      const b = document.getElementById("syncBadge");
+      if(b) b.title = `Last sync: ${new Date(lastSyncAt).toLocaleString()}`;
     }catch(e){
       console.warn("Firebase sync failed", e);
       toast("cloud sync failed");
+      setSyncBadge("warn", "Sync failed");
     }
   }, 800);
 }
+
+
 
 function saveLocal(opts={}){
   localStorage.setItem(LS_KEY, JSON.stringify(state.recipes));
@@ -1356,35 +1451,6 @@ function saveLocal(opts={}){
     }
   });
 
-  async function loadSiteData(){
-    const res = await fetch(SITE_JSON, {cache:"no-store"});
-    if(!res.ok) throw new Error("Failed to load recipes.json");
-    const data = await res.json();
-    if(!Array.isArray(data)) throw new Error("recipes.json not an array");
-    const t = Date.now();
-    return data.map(r => ({
-      id: r.id || uid(),
-      title: r.title || "(untitled)",
-      cuisine: canonicalOne(r.cuisine),
-      course: canonicalOne(r.course),
-      base: canonicalList(r.base),
-      mainIngredient: canonicalList(r.mainIngredient),
-      appliances: canonicalList(r.appliances),
-      timeMinutes: (typeof r.timeMinutes === "number") ? r.timeMinutes : (r.timeMinutes ? Number(r.timeMinutes) : null),
-      dishesCount: (typeof r.dishesCount === "number") ? r.dishesCount : (r.dishesCount ? Number(r.dishesCount) : null),
-      tags: canonicalList(r.tags),
-      cookedCount: Number(r.cookedCount || 0),
-      lastCookedAt: r.lastCookedAt || null,
-      createdAt: r.createdAt || t,
-      updatedAt: r.updatedAt || t,
-      imageUrl: r.imageUrl || "",
-      sourceUrl: r.sourceUrl || "",
-      servings: r.servings || "",
-      ingredients: r.ingredients || "",
-      directions: r.directions || "",
-      notes: r.notes || ""
-    }));
-  }
 
   function refreshFilterOptions(){
     const cuisines = Array.from(new Set(state.recipes.map(r => (r.cuisine||"").trim()).filter(Boolean))).sort();
@@ -2511,20 +2577,11 @@ function printCard(){
     const blob=new Blob([JSON.stringify(state.recipes,null,2)], {type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url; a.download="recipes.json"; a.click();
+    a.href=url; a.download="recipe-vault-backup.json"; a.click();
     URL.revokeObjectURL(url);
     toast("downloaded JSON");
   }
 
-  async function resetToSite(){
-    if(!confirm("Reset to site data? This will overwrite local edits on this device.")) return;
-    const data = await loadSiteData();
-    state.recipes = data;
-    saveLocal();
-    refreshFilterOptions();
-    renderGrid();
-    toast("reset");
-  }
 
   async function importJSON(file){
     const text = await file.text();
@@ -2574,50 +2631,20 @@ function printCard(){
         .catch(() => {});
 }
 
-
-// Fast start: local cache or recipes.json
+// Fast start: local cache only (offline-capable after first signed-in load)
 const local = loadLocal();
 if(local){
   state.recipes = local;
   normalizeAllRecipesInPlace();
   toast("loaded local cache");
-}else{
-  state.recipes = await loadSiteData();
-  normalizeAllRecipesInPlace();
-  saveLocal({skipCloud:true}); // don't push until Firebase confirms
-  toast("loaded recipes.json");
+} else {
+  state.recipes = [];
 }
-
 refreshFilterOptions();
 rebuildTagCaches();
 refreshEditSuggestions();
 
 
-async function restoreLocalRecipesIfEmpty() {
-  if (state?.recipes?.length) return false;
-
-  try {
-    const res = await fetch("recipes.json", { cache: "no-store" });
-    const data = await res.json();
-
-    if (Array.isArray(data) && data.length) {
-      state.recipes = data;
-      normalizeAllRecipesInPlace();
-      saveLocal({ skipCloud: true });
-      refreshFilterOptions();
-      rebuildTagCaches();
-      refreshEditSuggestions();
-      renderGrid();
-      if (state.selectedId) renderViewer();
-      console.warn("Restored recipes from recipes.json");
-      toast("restored local recipes");
-      return true;
-    }
-  } catch (e) {
-    console.warn("Failed to restore from recipes.json", e);
-  }
-  return false;
-}
 
 
 // Cloud sync (Firebase / Firestore)
@@ -2628,29 +2655,53 @@ if (window.FB && window.FB.enabled) {
   const user = window._getCurrentUser ? window._getCurrentUser() : null;
 
   setGate(!user);
+
+// IMPORTANT: do NOT return here.
+// We still need to finish init() so all event listeners/buttons are wired up.
+// When the user signs in, __onAuthChange will load + render recipes.
 if(!user){
-  // stop here: signed out = blank screen + sign-in button only
-  return;
+  setCloudStatus();
+  renderGrid(); // (won't be visible because gated, but keeps state sane)
+} else {
+  // Signed in now: proceed with cloud session below
 }
 
 
-  // If not signed in, keep local; if local is empty, restore from recipes.json
+
+  // Cloud-only session behavior:
+  // - Signed out: keep local cache (for this device), but do not attempt cloud.
+  // - Signed in: render immediately from local cache (offline-friendly), then pull cloud and subscribe.
   if (!user) {
-    console.warn("Not signed in; skipping cloud sync and keeping local data.");
-    await restoreLocalRecipesIfEmpty();
+    console.warn("Not signed in; skipping cloud sync.");
     toast("sign in to sync");
     setCloudStatus?.();
+
+    // Keep whatever is already in state/local cache; do not wipe.
     refreshFilterOptions();
     rebuildTagCaches();
     refreshEditSuggestions();
     renderGrid();
     if (state.selectedId) renderViewer();
+
   } else {
     try {
+      // 1) Instant render from local cache (works offline after first signed-in use on this device)
+      const local = loadLocal();
+      if (Array.isArray(local) && local.length > 0) {
+        state.recipes = local;
+        normalizeAllRecipesInPlace();
+        refreshFilterOptions();
+        rebuildTagCaches();
+        refreshEditSuggestions();
+        setCloudStatus();
+        renderGrid();
+        if (state.selectedId) renderViewer();
+      }
+
+      // 2) Cloud fetch (source of truth when it has data)
       const cloud = await window.FB.loadAll();
 
       if (Array.isArray(cloud) && cloud.length > 0) {
-        // Cloud is source of truth (only when it actually has data)
         state.recipes = cloud;
         normalizeAllRecipesInPlace();
         saveLocal({ skipCloud: true });
@@ -2659,15 +2710,14 @@ if(!user){
         refreshEditSuggestions();
         toast("synced from cloud");
       } else {
-        // Cloud empty: DO NOT wipe local. If local is empty, restore from recipes.json.
-        console.warn("Cloud returned 0 recipes; keeping local recipes.json data.");
-        await restoreLocalRecipesIfEmpty();
+        // Cloud empty: do NOT wipe local
+        console.warn("Cloud returned 0 recipes; keeping local cache.");
         toast("cloud empty (kept local)");
       }
 
-      // Live updates from other devices (but never wipe local if update is empty)
+      // 3) Live updates (ignore empty snapshots to avoid wiping local)
       if (window.FB.unsubscribe) window.FB.unsubscribe();
-      window.FB.unsubscribe = window.FB.subscribe(async (list) => {
+      window.FB.unsubscribe = window.FB.subscribe((list) => {
         if (state.editOpen) return;
 
         if (Array.isArray(list) && list.length > 0) {
@@ -2681,8 +2731,7 @@ if(!user){
           renderGrid();
           if (state.selectedId) renderViewer();
         } else {
-          console.warn("Cloud update returned 0 recipes; ignoring to avoid wiping local.");
-          await restoreLocalRecipesIfEmpty();
+          console.warn("Cloud snapshot empty; ignoring to avoid wiping local.");
           setCloudStatus();
         }
       });
@@ -2692,10 +2741,11 @@ if(!user){
       if (state.selectedId) renderViewer();
 
     } catch (e) {
-      console.warn("Firebase load/subscribe failed; keeping local data.", e);
-      await restoreLocalRecipesIfEmpty();
+      console.warn("Firebase load/subscribe failed; using local cache.", e);
       toast("cloud offline");
       setCloudStatus?.();
+
+      // Keep whatever is already in state/local cache; do not wipe.
       refreshFilterOptions();
       rebuildTagCaches();
       refreshEditSuggestions();
@@ -2704,6 +2754,7 @@ if(!user){
     }
   }
 }
+
 
 
 
@@ -2742,7 +2793,11 @@ $("clearFiltersBtn").onclick = clearAllFilters;
 
     $("newBtn").onclick = newRecipe;
 
-    $("backupBtn").onclick = downloadJSON;
+    $("backupBtn").onclick = ()=>{
+      downloadJSON();
+      closeAdvancedMenu();
+    };
+
 
     function closeAdvancedMenu(){
   const d = document.getElementById("advancedMenu");
@@ -2753,7 +2808,9 @@ $("clearFiltersBtn").onclick = clearAllFilters;
 $("restoreBtn").onclick = ()=>{
   $("importFile").value = "";
   $("importFile").click();
+  closeAdvancedMenu();
 };
+
 
 $("importFile").addEventListener("change", async ()=>{
   const f = $("importFile").files?.[0];
@@ -2768,8 +2825,33 @@ $("importFile").addEventListener("change", async ()=>{
   }
 });
 
+$("signOutBtn").onclick = async ()=>{
+  if(!confirm("Sign out on this device? You can sign back in anytime.")) return;
+  try{
+    await (window.AUTH?.signOut?.());
+    toast("signed out");
+  }catch(e){
+    console.warn(e);
+    toast("sign out failed");
+  }
+  closeAdvancedMenu();
+};
+
 $("pushCloudBtn").onclick = async ()=>{
-  if(!confirm("Push THIS device's recipes to cloud? (Overwrites cloud)")) return;
+  const user = window._getCurrentUser ? window._getCurrentUser() : null;
+  if(!user){ alert("Sign in first."); return; }
+
+  const msg =
+`Push THIS device's copy to the cloud?
+
+Use this ONLY for recovery / intentional overwrite:
+• Example: your cloud got wiped or you're restoring from a backup
+• It overwrites the cloud copy to match THIS device
+
+Normal edits auto-sync.`;
+
+  if(!confirm(msg)) return;
+
   try{
     await window.FB.syncAll(state.recipes);
     toast("pushed to cloud");
@@ -2777,7 +2859,10 @@ $("pushCloudBtn").onclick = async ()=>{
     console.warn(e);
     toast("push failed");
   }
+
+  closeAdvancedMenu();
 };
+
 
 
 
