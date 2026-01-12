@@ -59,6 +59,49 @@
     .btn.ghost{background:transparent}
     .btn.small{padding:8px 10px;border-radius:10px;font-size:12px}
 
+    .btnSm{
+  padding:6px 10px;
+  border-radius:10px;
+  font-size:12px;
+  font-weight:850;
+  line-height:1;
+}
+
+.scaleTools{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+}
+
+.scaleBtns{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.scaleServings{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.scaleInput{
+  width:84px;
+  padding:6px 8px;
+  border-radius:10px;
+  border:1px solid var(--line);
+  background:var(--panel2);
+  color:var(--text);
+}
+
+.mono{ font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace; }
+
+
     input,select,textarea{
       width:100%;
       border:1px solid var(--line);
@@ -392,14 +435,36 @@
     </div>
 
     <div class="section">
-      <div class="sectionHd">
-        <div class="h2">Ingredients</div>
-        <div class="hint">Tap checkboxes as you cook (saved on this device)</div>
-      </div>
-      <div class="sectionBd">
-        <div id="vIngredients"></div>
-      </div>
+  <div class="sectionHd">
+    <div>
+      <div class="h2">Ingredients</div>
+      <div class="hint">Tap checkboxes as you cook (saved on this device)</div>
     </div>
+
+    <div class="scaleTools" aria-label="Scale recipe">
+      <div class="scaleBtns">
+        <span class="pill">Scale</span>
+        <button class="btn btnSm" id="scaleDown" type="button" title="Decrease">−</button>
+        <button class="btn btnSm" id="scaleReset" type="button" title="Reset to 1×">1×</button>
+        <button class="btn btnSm" id="scaleUp" type="button" title="Increase">+</button>
+      </div>
+
+      <div class="scaleServings" id="scaleServingsRow" style="display:none;">
+        <span class="muted">Servings</span>
+        <span id="scaleServingsBase" class="mono"></span>
+        <span class="muted">→</span>
+        <input id="scaleServingsTarget" class="scaleInput" type="number" min="0.5" step="0.5" inputmode="decimal" />
+      </div>
+
+      <div class="hint" id="scaleMeta"></div>
+    </div>
+  </div>
+
+  <div class="sectionBd">
+    <div id="vIngredients"></div>
+  </div>
+</div>
+
 
     <div class="section">
       <div class="sectionHd"><div class="h2">Directions</div></div>
@@ -508,7 +573,14 @@
   const CHECKS_PREFIX = "rv_ing_checks_v1:"; // per-recipe checkbox state
 
   const $ = (id)=>document.getElementById(id);
-  const state = { recipes: [], selectedId: null, editOpen: false };
+  const state = {
+  recipes: [],
+  selectedId: null,
+  editOpen: false,
+  scaleFactor: 1,
+  baseServings: null
+};
+
 
   const normalizeList = (s)=> (s||"").split(",").map(x=>x.trim()).filter(Boolean);
   const uid = ()=> Math.random().toString(36).slice(2,10) + "-" + Date.now().toString(36);
@@ -725,6 +797,12 @@
   function openViewer(id){
     state.selectedId = id;
     state.editOpen = false;
+
+    state.scaleFactor = 1;
+    state.baseServings = null;
+    $("scaleServingsTarget").value = "";
+
+
     $("editPanel").classList.remove("show");
     $("editToggleBtn").textContent = "Edit";
     renderViewer();
@@ -764,7 +842,120 @@
     return lines;
   }
 
-  function renderIngredients(r){
+  // -------- Smart scaling helpers --------
+const UNICODE_FRACS = {
+  "¼": 1/4, "½": 1/2, "¾": 3/4,
+  "⅐": 1/7, "⅑": 1/9, "⅒": 1/10,
+  "⅓": 1/3, "⅔": 2/3,
+  "⅕": 1/5, "⅖": 2/5, "⅗": 3/5, "⅘": 4/5,
+  "⅙": 1/6, "⅚": 5/6,
+  "⅛": 1/8, "⅜": 3/8, "⅝": 5/8, "⅞": 7/8
+};
+
+function parseNumberToken(tok){
+  if(!tok) return null;
+  tok = tok.trim();
+  if(UNICODE_FRACS[tok] != null) return UNICODE_FRACS[tok];
+
+  // "1½"
+  const mMix = tok.match(/^(\d+)([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])$/);
+  if(mMix) return Number(mMix[1]) + (UNICODE_FRACS[mMix[2]] || 0);
+
+  // "1/2"
+  const mFrac = tok.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if(mFrac){
+    const a = Number(mFrac[1]), b = Number(mFrac[2]);
+    if(b) return a/b;
+  }
+
+  // "1" or "1.25"
+  if(/^\d+(\.\d+)?$/.test(tok)) return Number(tok);
+  return null;
+}
+
+function parseLeadingQuantity(line){
+  const s = line.trim();
+  if(/^##\s*/.test(s)) return null; // header line
+
+  // range: "1-2" or "1 to 2"
+  const range = s.match(/^(\S+)\s*(?:-|–|—|\bto\b)\s*(\S+)(.*)$/i);
+  if(range){
+    const a = parseNumberToken(range[1]);
+    const b = parseNumberToken(range[2]);
+    if(a != null && b != null){
+      return { isRange:true, a, b, rest:(range[3]||"").trimStart() };
+    }
+  }
+
+  // mixed: "1 1/2"
+  const mixed = s.match(/^(\d+)\s+(\S+)(.*)$/);
+  if(mixed){
+    const a = Number(mixed[1]);
+    const b = parseNumberToken(mixed[2]);
+    if(!Number.isNaN(a) && b != null){
+      return { isRange:false, v:a+b, rest:(mixed[3]||"").trimStart() };
+    }
+  }
+
+  // single: "½" or "1/2" or "2"
+  const single = s.match(/^(\S+)(.*)$/);
+  if(single){
+    const v = parseNumberToken(single[1]);
+    if(v != null) return { isRange:false, v, rest:(single[2]||"").trimStart() };
+  }
+
+  return null;
+}
+
+function formatNumberSmart(n){
+  if(Math.abs(n - Math.round(n)) < 0.01) return String(Math.round(n));
+  // try common fraction denominators
+  const dens = [2,3,4,5,6,8,10,12,16];
+  const sign = n < 0 ? -1 : 1;
+  n = Math.abs(n);
+  const whole = Math.floor(n + 1e-9);
+  const frac = n - whole;
+
+  let best = null;
+  for(const d of dens){
+    const num = Math.round(frac * d);
+    const approx = num / d;
+    const err = Math.abs(frac - approx);
+    if(best == null || err < best.err) best = { num, d, err };
+  }
+  if(best && best.num !== 0 && best.err < 0.02){
+    // reduce fraction
+    const gcd = (a,b)=> b ? gcd(b, a%b) : a;
+    let num = best.num, den = best.d;
+    const g = gcd(num, den);
+    num /= g; den /= g;
+    const out = whole ? `${whole} ${num}/${den}` : `${num}/${den}`;
+    return sign < 0 ? `-${out}` : out;
+  }
+  const dec = (sign * (whole + frac)).toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1");
+  return dec;
+}
+
+function scaleIngredientLine(line, factor){
+  if(!factor || Math.abs(factor - 1) < 1e-9) return line;
+  const p = parseLeadingQuantity(line);
+  if(!p) return line;
+
+  if(p.isRange){
+    return `${formatNumberSmart(p.a*factor)}-${formatNumberSmart(p.b*factor)} ${p.rest}`.trim();
+  }
+  return `${formatNumberSmart(p.v*factor)} ${p.rest}`.trim();
+}
+
+function parseFirstNumberAnywhere(text){
+  if(!text) return null;
+  const m = String(text).match(/(\d+(\.\d+)?|\d+\s*\/\s*\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/);
+  if(!m) return null;
+  return parseNumberToken(m[1].replace(/\s+/g,""));
+}
+
+
+  function renderIngredients(r, factor = 1){
     const host = $("vIngredients");
     host.innerHTML = "";
 
@@ -802,7 +993,8 @@
 
       const txt = document.createElement("div");
       txt.className = "ingText" + (cb.checked ? " checked" : "");
-      txt.textContent = line;
+      txt.textContent = scaleIngredientLine(line, factor);
+
 
       cb.addEventListener("change", ()=>{
         const set = loadChecks(r.id);
@@ -855,7 +1047,10 @@
       ? `Source: <a href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(r.sourceUrl)}</a>`
       : `<span class="muted">No source URL</span>`;
 
-    renderIngredients(r);
+    state.baseServings = parseFirstNumberAnywhere(r.servings);
+    updateScaleUI();
+    renderIngredients(r, state.scaleFactor);
+
 
     $("vDirections").textContent = r.directions || "";
 
@@ -868,6 +1063,39 @@
 
     if(state.editOpen) fillEditForm(r);
   }
+
+  function updateScaleUI(){
+    const r = getSelected();
+    if(!r) return;
+
+    const row = $("scaleServingsRow");
+    const baseEl = $("scaleServingsBase");
+    const targetEl = $("scaleServingsTarget");
+    const meta = $("scaleMeta");
+    const resetBtn = $("scaleReset");
+
+    const base = state.baseServings;
+
+    if(base && base > 0){
+      row.style.display = "";
+      baseEl.textContent = formatNumberSmart(base);
+
+      // Default target to base if empty
+      const t = Number(targetEl.value);
+      const target = (t && t > 0) ? t : base;
+      if(!(t && t > 0)) targetEl.value = String(base);
+
+      state.scaleFactor = target / base;
+
+      resetBtn.textContent = `${formatNumberSmart(state.scaleFactor)}×`;
+      meta.textContent = `Scaled to ${formatNumberSmart(target)} servings (${formatNumberSmart(state.scaleFactor)}×)`;
+    } else {
+      row.style.display = "none";
+      resetBtn.textContent = `${formatNumberSmart(state.scaleFactor)}×`;
+      meta.textContent = `Scale: ${formatNumberSmart(state.scaleFactor)}×`;
+    }
+  }
+
 
   /* Editing (only on demand) */
   function fillEditForm(r){
@@ -1230,6 +1458,58 @@
     $("printBtn").onclick = printOne;
     $("copyGroceriesBtn").onclick = copyGroceries;
     $("downloadGroceriesBtn").onclick = downloadGroceriesTxt;
+
+    // Scale controls
+    $("scaleDown").onclick = ()=>{
+      const r = getSelected(); if(!r) return;
+
+      if(state.baseServings){
+        const el = $("scaleServingsTarget");
+        const v = Math.max(0.5, (Number(el.value) || state.baseServings) - 1);
+        el.value = String(v);
+      } else {
+        state.scaleFactor = Math.max(0.125, state.scaleFactor / 2);
+      }
+
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+    };
+
+    $("scaleUp").onclick = ()=>{
+      const r = getSelected(); if(!r) return;
+
+      if(state.baseServings){
+        const el = $("scaleServingsTarget");
+        const v = (Number(el.value) || state.baseServings) + 1;
+        el.value = String(v);
+      } else {
+        state.scaleFactor = Math.min(16, state.scaleFactor * 2);
+      }
+
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+    };
+
+    $("scaleReset").onclick = ()=>{
+      const r = getSelected(); if(!r) return;
+
+      state.scaleFactor = 1;
+      if(state.baseServings){
+        $("scaleServingsTarget").value = String(state.baseServings);
+      }
+
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+    };
+
+    $("scaleServingsTarget").addEventListener("input", ()=>{
+      const r = getSelected(); if(!r) return;
+      if(!state.baseServings) return;
+
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+    });
+
 
     // Snackbar undo
     $("snackUndo").onclick = () => { if(undoFn) undoFn(); hideSnack(); };
