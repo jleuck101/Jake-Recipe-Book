@@ -1802,11 +1802,22 @@ function parseFirstNumberAnywhere(text){
     }
 
     function directionsHTML(){
-      const steps = parseSteps(r.directions || r.instructions || "");
-      if(steps.length === 0) return `<div class="muted">—</div>`;
-      const lis = steps.map(s => `<li>${escapeHtml(s)}</li>`).join("");
-      return `<ol class="steps">${lis}</ol>`;
+  const lines = parseIngredientLines(r.directions || r.instructions || "");
+  if(lines.length === 0) return `<div class="muted">—</div>`;
+
+  let out = `<ol class="steps">`;
+  for(const line of lines){
+    if(line.startsWith("## ")){
+      // close list, add subhead, reopen list
+      out += `</ol><h3>${escapeHtml(line.replace(/^##\\s*/, ""))}</h3><ol class="steps">`;
+      continue;
     }
+    out += `<li>${escapeHtml(line)}</li>`;
+  }
+  out += `</ol>`;
+  return out;
+}
+
 
     const notes = (r.notes || "").trim();
     const notesHTML = notes
