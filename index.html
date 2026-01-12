@@ -149,7 +149,10 @@
     }
     @media(max-width:1100px){.grid{grid-template-columns: repeat(3, minmax(0,1fr));}}
     @media(max-width:800px){.grid{grid-template-columns: repeat(2, minmax(0,1fr));}}
-    @media(max-width:520px){.grid{grid-template-columns: 1fr;}}
+    @media(max-width:520px){.grid{grid-template-columns: repeat(2, minmax(0,1fr));}}
+    @media(max-width:520px){.tileBody{padding:12px 12px 14px}}
+    @media(max-width:520px){.tileTitle{font-size:16px}}
+
     .tile{
       border:1px solid var(--line);
       background:rgba(18,20,27,.65);
@@ -186,6 +189,27 @@
       border:1px solid var(--line);
       background:rgba(255,255,255,.04);
     }
+
+    /* Edit suggestions (clickable chips) */
+    .suggestRow{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:8px;
+    }
+    .chipBtn{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      padding:6px 10px;
+      border-radius:999px;
+      cursor:pointer;
+      font-weight:800;
+      font-size:12px;
+    }
+    .chipBtn:hover{ border-color:rgba(255,255,255,.22); }
+
+
     .badge{
       display:inline-flex;align-items:center;gap:6px;
     }
@@ -332,6 +356,16 @@
     }
     .snack.show{display:flex}
     .snackMsg{color:rgba(238,242,255,.92); font-size:13px}
+
+        /* Cook Mode (bigger, easier to read on phone) */
+    body.cookMode .viewerInner{ font-size: 18px; }
+    body.cookMode .pre{ font-size: 18px; line-height: 1.65; }
+    body.cookMode .ingText{ font-size: 18px; line-height: 1.65; }
+    body.cookMode .viewerTitle{ font-size: 22px; }
+    body.cookMode .sectionBd{ padding: 14px; }
+    body.cookMode .ingItem{ padding: 12px 12px; }
+    body.cookMode .ingItem input{ transform: scale(1.35); }
+
   </style>
 </head>
 
@@ -404,14 +438,16 @@
       <div class="viewerHeader">
         <button class="btn ghost" id="backBtn">← Back</button>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn small ok" id="markCookedBtn" title="Prevents double-taps; offers Undo">Cooked +1</button>
-          <button class="btn small" id="copyGroceriesBtn" title="Copy ingredients to paste into Apple Reminders">Copy groceries</button>
-          <button class="btn small" id="downloadGroceriesBtn" title="Download ingredients as a .txt file">Groceries .txt</button>
-          <button class="btn small" id="downloadOneBtn">Download recipe</button>
-          <button class="btn small" id="printBtn">Print</button>
-          <button class="btn small primary" id="editToggleBtn">Edit</button>
-          <button class="btn small danger" id="deleteBtn">Delete</button>
-        </div>
+  <button class="btn small ok" id="markCookedBtn" title="Prevents double-taps; offers Undo">Cooked +1</button>
+  <button class="btn small" id="copyGroceriesBtn" title="Copy ingredients to paste into Apple Reminders">Copy groceries</button>
+  <button class="btn small" id="downloadGroceriesBtn" title="Download ingredients as a .txt file">Groceries .txt</button>
+  <button class="btn small" id="downloadOneBtn" title="Downloads a clean 1-page recipe card (uses your current scaling)">Download recipe</button>
+  <button class="btn small" id="printBtn">Print</button>
+  <button class="btn small" id="cookModeBtn" title="Bigger text + tries to keep screen awake">Cook Mode</button>
+  <button class="btn small primary" id="editToggleBtn">Edit</button>
+  <button class="btn small danger" id="deleteBtn">Delete</button>
+</div>
+
       </div>
     </div>
   </div>
@@ -419,6 +455,8 @@
   <div class="viewerInner">
     <h2 class="viewerTitle" id="vTitle"></h2>
     <div class="viewerSub" id="vSub"></div>
+<div class="viewerSub" id="wakeHint" style="display:none;"></div>
+
 
     <div class="viewerHero" id="vHero" style="display:none;">
       <img id="vImg" alt="" />
@@ -492,8 +530,10 @@
             <input id="eTitle"/>
           </div>
           <div>
-            <div class="k">Cuisine</div>
-            <input id="eCuisine" placeholder="Mexican (optional)"/>
+          <div class="k">Cuisine</div>
+          <input id="eCuisine" placeholder="Mexican (optional)" autocomplete="off"/>
+          <div class="suggestRow" id="cuisineSuggestions"></div>
+
           </div>
         </div>
 
@@ -515,7 +555,9 @@
           </div>
           <div>
             <div class="k">Tags (comma)</div>
-            <input id="eTags" placeholder="weeknight, spicy, instant pot"/>
+<input id="eTags" placeholder="weeknight, spicy, instant pot" autocomplete="off"/>
+<div class="suggestRow" id="tagSuggestions"></div>
+
           </div>
         </div>
 
@@ -572,6 +614,9 @@
   const LS_KEY = "recipe_vault_data_v3_gallery";
   const CHECKS_PREFIX = "rv_ing_checks_v1:"; // per-recipe checkbox state
 
+  // Per-recipe last-used scaling (saved on this device)
+  const SCALE_STORE_KEY = "rv.scaleById.v1";
+  
   const $ = (id)=>document.getElementById(id);
   const state = {
   recipes: [],
@@ -584,6 +629,109 @@
 
   const normalizeList = (s)=> (s||"").split(",").map(x=>x.trim()).filter(Boolean);
   const uid = ()=> Math.random().toString(36).slice(2,10) + "-" + Date.now().toString(36);
+
+// ---- Edit suggestions (reuse + filter tags/cuisines) ----
+let ALL_CUISINES = [];
+let ALL_TAGS = [];
+
+function rebuildTagCaches(){
+  const cuisineSet = new Set();
+  const tagSet = new Set();
+
+  for(const r of state.recipes || []){
+    const c = (r.cuisine || "").trim();
+    if(c) cuisineSet.add(c);
+
+    for(const t of (r.tags || [])){
+      const tag = String(t || "").trim();
+      if(tag) tagSet.add(tag);
+    }
+  }
+
+  ALL_CUISINES = Array.from(cuisineSet).sort((a,b)=>a.localeCompare(b));
+  ALL_TAGS = Array.from(tagSet).sort((a,b)=>a.localeCompare(b));
+}
+
+function lastTagToken(inputValue){
+  const parts = String(inputValue || "").split(",");
+  return (parts[parts.length - 1] || "").trim().toLowerCase();
+}
+
+function filterList(values, q){
+  const qq = (q || "").trim().toLowerCase();
+  if(!qq) return values;
+  return values.filter(v => v.toLowerCase().includes(qq));
+}
+
+function renderSuggestChips(hostId, values, q, onPick){
+  const host = $(hostId);
+  if(!host) return;
+  host.innerHTML = "";
+
+  const qq = (q || "").trim();
+  const filtered = filterList(values, qq).slice(0, 30);
+  const shownSet = new Set(filtered.map(v => v.toLowerCase()));
+
+  // Offer "Add" if typed value isn't already in the list
+  if(qq && !shownSet.has(qq.toLowerCase())){
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "chipBtn";
+    addBtn.textContent = `+ Add "${qq}"`;
+    addBtn.addEventListener("click", (e)=>{
+      e.preventDefault();
+      onPick(qq);
+      rebuildTagCaches();
+      refreshEditSuggestions();
+    });
+    host.appendChild(addBtn);
+  }
+
+  filtered.forEach(v=>{
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chipBtn";
+    b.textContent = v;
+    b.addEventListener("click", (e)=>{
+      e.preventDefault();
+      onPick(v);
+      refreshEditSuggestions();
+    });
+    host.appendChild(b);
+  });
+}
+
+// Replace the LAST comma token with the selected tag (smart autocomplete behavior)
+function replaceLastTagTokenWith(tag){
+  const input = $("eTags");
+  if(!input) return;
+
+  const wanted = String(tag).trim().toLowerCase();
+  if(!wanted) return;
+
+  const parts = String(input.value || "").split(",");
+  parts[parts.length - 1] = " " + wanted;
+
+  const normalized = normalizeList(parts.join(",").toLowerCase());
+  input.value = normalized.join(", ") + ", "; // keeps typing flow
+}
+
+function refreshEditSuggestions(){
+  // Cuisine: filter by full input
+  const cuisineQ = ($("eCuisine")?.value || "").trim();
+
+  // Tags: filter by last token you're typing
+  const tagQ = lastTagToken($("eTags")?.value || "");
+
+  renderSuggestChips("cuisineSuggestions", ALL_CUISINES, cuisineQ, (c)=>{
+    $("eCuisine").value = c;
+  });
+
+  renderSuggestChips("tagSuggestions", ALL_TAGS, tagQ, (t)=>{
+    replaceLastTagTokenWith(t);
+  });
+}
+
 
   function setStatus(msg){ $("status").textContent = msg ? ("— " + msg) : ""; }
   function toast(msg){ setStatus(msg); setTimeout(()=>setStatus(""), 1200); }
@@ -611,7 +759,12 @@
     snackTimer = null;
   }
 
-  function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(state.recipes)); }
+function saveLocal(){
+  localStorage.setItem(LS_KEY, JSON.stringify(state.recipes));
+  rebuildTagCaches();
+  refreshEditSuggestions();
+}
+
   function loadLocal(){
     const raw = localStorage.getItem(LS_KEY);
     if(!raw) return null;
@@ -621,6 +774,78 @@
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+
+    // Cook Mode + Wake Lock (keep screen awake when supported)
+  const COOKMODE_KEY = "rv.cookMode.v1";
+  let wakeLockSentinel = null;
+
+  function cookModeEnabled(){
+    return document.body.classList.contains("cookMode");
+  }
+
+  async function requestWakeLock(){
+    try{
+      if(!("wakeLock" in navigator)) return false;
+      wakeLockSentinel = await navigator.wakeLock.request("screen");
+      return true;
+    }catch{
+      wakeLockSentinel = null;
+      return false;
+    }
+  }
+
+  async function releaseWakeLock(){
+    try{
+      if(wakeLockSentinel){
+        await wakeLockSentinel.release();
+        wakeLockSentinel = null;
+      }
+    }catch{}
+  }
+
+  async function updateCookModeUI(){
+    const btn = $("cookModeBtn");
+    const hint = $("wakeHint");
+    const on = cookModeEnabled();
+
+    if(btn) btn.textContent = on ? "Cook Mode: On" : "Cook Mode";
+
+    if(!hint) return;
+
+    const viewerOpen = $("viewer").classList.contains("show");
+    if(on && !viewerOpen){
+      hint.style.display = "none";
+      hint.textContent = "";
+      return;
+    }
+
+    if(!on){
+      hint.style.display = "none";
+      hint.textContent = "";
+      await releaseWakeLock();
+      return;
+    }
+
+    hint.style.display = "";
+    hint.textContent = "Tip: keeping your screen awake while cooking…";
+
+    const ok = await requestWakeLock();
+    hint.textContent = ok
+      ? "Screen awake: enabled (if supported)."
+      : "Tip: set your phone's Screen Timeout longer while cooking.";
+  }
+
+  function setCookMode(on){
+    document.body.classList.toggle("cookMode", !!on);
+    localStorage.setItem(COOKMODE_KEY, on ? "1" : "0");
+    updateCookModeUI();
+  }
+
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.visibilityState === "visible" && cookModeEnabled()){
+      requestWakeLock();
+    }
+  });
 
   async function loadSiteData(){
     const res = await fetch(SITE_JSON, {cache:"no-store"});
@@ -700,7 +925,11 @@
   // Make slider intuitive: right = bigger cards (fewer columns)
   function applyCardSize(){
     const v = Number($("size").value); // 2..6
-    const cols = (8 - v);              // 6..2
+    let cols = (8 - v);                // 6..2 (right = bigger cards)
+
+    // On small screens, keep cards big (never more than 2 columns)
+    if(window.innerWidth <= 520) cols = Math.min(cols, 2);
+
     setGridColumns(cols);
   }
 
@@ -772,6 +1001,13 @@
       if(r.timeMinutes) meta.appendChild(pill(`${r.timeMinutes}m`));
       if((r.appliances||[]).length) meta.appendChild(pill(r.appliances[0]));
 
+      // Show up to 2 tags on cards (quick glance)
+      if((r.tags||[]).length){
+        meta.appendChild(pill(r.tags[0]));
+        if(r.tags[1]) meta.appendChild(pill(r.tags[1]));
+      }
+
+
       body.appendChild(title);
       body.appendChild(meta);
 
@@ -802,19 +1038,29 @@
     state.baseServings = null;
     $("scaleServingsTarget").value = "";
 
-
     $("editPanel").classList.remove("show");
     $("editToggleBtn").textContent = "Edit";
-    renderViewer();
+
+    renderViewer();      // computes baseServings + renders default scale
+    applySavedScale();   // restores last-used scale for this recipe (if any)
+
     showViewer(true);
+
+    // If Cook Mode is on, update hint + try wake lock now (user gesture is the click)
+    if(cookModeEnabled()) updateCookModeUI();
   }
+
 
   function closeViewer(){
     showViewer(false);
     state.selectedId = null;
     state.editOpen = false;
     hideSnack();
+    releaseWakeLock();
+    const hint = $("wakeHint");
+    if(hint){ hint.style.display = "none"; hint.textContent = ""; }
   }
+
 
   // Ingredients checkbox state helpers
   function checksKey(recipeId){ return CHECKS_PREFIX + recipeId; }
@@ -836,6 +1082,64 @@
       localStorage.setItem(checksKey(recipeId), JSON.stringify(Array.from(set)));
     }catch{}
   }
+
+    // Scale persistence helpers
+  function loadScaleMap(){
+    try { return JSON.parse(localStorage.getItem(SCALE_STORE_KEY) || "{}") || {}; }
+    catch { return {}; }
+  }
+
+  function saveScaleForRecipe(id, data){
+    const map = loadScaleMap();
+    map[id] = { ...(map[id] || {}), ...data, t: Date.now() };
+    localStorage.setItem(SCALE_STORE_KEY, JSON.stringify(map));
+  }
+
+  function getScaleForRecipe(id){
+    const map = loadScaleMap();
+    return map[id] || null;
+  }
+
+  function persistCurrentScale(){
+    const r = getSelected();
+    if(!r) return;
+
+    const targetEl = $("scaleServingsTarget");
+    const targetVal = Number(targetEl?.value);
+
+    if(state.baseServings && targetVal && targetVal > 0){
+      saveScaleForRecipe(r.id, { targetServings: targetVal, scaleFactor: state.scaleFactor });
+    } else {
+      saveScaleForRecipe(r.id, { scaleFactor: state.scaleFactor });
+    }
+  }
+
+  function applySavedScale(){
+    const r = getSelected();
+    if(!r) return;
+
+    const saved = getScaleForRecipe(r.id);
+    if(!saved) return;
+
+    // If we have a base servings, restore target servings if present
+    if(state.baseServings && saved.targetServings){
+      $("scaleServingsTarget").value = String(saved.targetServings);
+      state.scaleFactor = Number(saved.targetServings) / state.baseServings;
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+      persistCurrentScale();
+      return;
+    }
+
+    // Otherwise restore a raw factor
+    if(saved.scaleFactor){
+      state.scaleFactor = Number(saved.scaleFactor) || 1;
+      updateScaleUI();
+      renderIngredients(r, state.scaleFactor);
+      persistCurrentScale();
+    }
+  }
+
 
   function parseIngredientLines(text){
     const lines = (text || "").split("\n").map(l => l.trim()).filter(l => l.length>0);
@@ -1052,6 +1356,7 @@ function parseFirstNumberAnywhere(text){
     renderIngredients(r, state.scaleFactor);
 
 
+
     $("vDirections").textContent = r.directions || "";
 
     if(r.notes && r.notes.trim()){
@@ -1119,6 +1424,9 @@ function parseFirstNumberAnywhere(text){
       r.lastCookedAt ? `Last cooked: ${new Date(r.lastCookedAt).toLocaleString()}` : ""
     ].filter(Boolean);
     $("editStats").textContent = parts.join(" • ");
+
+    refreshEditSuggestions();
+
   }
 
   function toggleEdit(){
@@ -1167,7 +1475,9 @@ function parseFirstNumberAnywhere(text){
     refreshFilterOptions();
     renderGrid();
     renderViewer();
+    refreshEditSuggestions();
     toast("saved locally");
+
   }
 
   // Cooked +1 with cooldown + Undo snackbar
@@ -1255,17 +1565,61 @@ function parseFirstNumberAnywhere(text){
       .slice(0, 60) || "recipe";
   }
 
-  function recipeToStandaloneHTML(r){
+  function recipeToStandaloneHTML(r, factor = 1){
     const title = escapeHtml(r.title || "Recipe");
-    const img = r.imageUrl ? `<img src="${escapeHtml(r.imageUrl)}" alt="" />` : "";
-    const source = r.sourceUrl ? `<p class="muted">Source: ${escapeHtml(r.sourceUrl)}</p>` : "";
+
+    // Absolute image URL so the downloaded HTML can still load images while online
+    const imgUrl = r.imageUrl ? new URL(r.imageUrl, location.href).toString() : "";
+    const img = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="" />` : "";
+
+    const source = r.sourceUrl
+      ? `<p class="muted">Source: <a href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(r.sourceUrl)}</a></p>`
+      : "";
+
     const infoBits = [];
     if(r.cuisine) infoBits.push(escapeHtml(r.cuisine));
     if(r.timeMinutes) infoBits.push(`${Number(r.timeMinutes)} min`);
     if(r.servings) infoBits.push(escapeHtml(r.servings));
+    if(Math.abs((factor||1) - 1) > 1e-9) infoBits.push(`Scaled: ${escapeHtml(formatNumberSmart(factor))}×`);
     if((r.appliances||[]).length) infoBits.push(`Appliances: ${escapeHtml(r.appliances.join(", "))}`);
     if((r.tags||[]).length) infoBits.push(`Tags: ${escapeHtml(r.tags.join(", "))}`);
     const info = infoBits.length ? `<div class="meta">${infoBits.join(" • ")}</div>` : "";
+
+    function ingredientsHTML(){
+      const lines = parseIngredientLines(r.ingredients || "");
+      if(lines.length === 0) return `<div class="muted">No ingredients yet.</div>`;
+
+      let out = `<ul>`;
+      for(const line of lines){
+        if(line.startsWith("## ")){
+          out += `</ul><h3>${escapeHtml(line.replace(/^##\\s*/, ""))}</h3><ul>`;
+          continue;
+        }
+        out += `<li>${escapeHtml(scaleIngredientLine(line, factor))}</li>`;
+      }
+      out += `</ul>`;
+      return out;
+    }
+
+    function directionsHTML(){
+      const lines = parseIngredientLines(r.directions || "");
+      if(lines.length === 0) return `<div class="muted">No directions yet.</div>`;
+
+      let out = `<ol>`;
+      for(const line of lines){
+        if(line.startsWith("## ")){
+          out += `</ol><h3>${escapeHtml(line.replace(/^##\\s*/, ""))}</h3><ol>`;
+          continue;
+        }
+        out += `<li>${escapeHtml(line)}</li>`;
+      }
+      out += `</ol>`;
+      return out;
+    }
+
+    const notesHTML = (r.notes && r.notes.trim())
+      ? `<div class="sec"><div class="pad"><h2>Notes</h2><pre>${escapeHtml(r.notes)}</pre></div></div>`
+      : "";
 
     return `<!doctype html>
 <html>
@@ -1275,18 +1629,22 @@ function parseFirstNumberAnywhere(text){
 <title>${title}</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:0;background:#0b0c10;color:#eef2ff;padding:16px}
-  .card{max-width:820px;margin:0 auto;background:#12141b;border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden}
+  .card{max-width:900px;margin:0 auto;background:#12141b;border:1px solid rgba(255,255,255,.12);border-radius:16px;overflow:hidden}
   .pad{padding:14px}
   h1{margin:0;font-size:20px}
   .meta{margin-top:8px;color:rgba(238,242,255,.72);font-size:12px;line-height:1.4}
   img{width:100%;display:block;max-height:420px;object-fit:cover}
   h2{font-size:14px;margin:0}
+  h3{font-size:13px;margin:14px 0 8px}
   .sec{margin-top:12px;border-top:1px solid rgba(255,255,255,.10)}
   .sec .pad{padding-top:12px}
+  ul,ol{margin:10px 0 0; padding-left:20px}
+  li{margin:6px 0; line-height:1.5}
   pre{white-space:pre-wrap;line-height:1.55;font-size:14px;margin:8px 0 0}
   .muted{color:rgba(238,242,255,.65);font-size:12px}
   .btnbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
   button{border:1px solid rgba(255,255,255,.14);background:#171a23;color:#eef2ff;padding:10px 12px;border-radius:12px;font-weight:800;cursor:pointer}
+  @media print{ .btnbar{display:none} body{padding:0} .card{border:none;border-radius:0} }
 </style>
 </head>
 <body>
@@ -1299,20 +1657,22 @@ function parseFirstNumberAnywhere(text){
       <div class="btnbar">
         <button onclick="window.print()">Print</button>
       </div>
-      <p class="muted">Note: images load if this file can access the same <code>images/</code> paths (or if you’re online and opened it from your hosted site).</p>
+      <p class="muted">Tip: save this file and open it anytime. Images will load while online (linked to your hosted site).</p>
     </div>
-    <div class="sec"><div class="pad"><h2>Ingredients</h2><pre>${escapeHtml(r.ingredients||"")}</pre></div></div>
-    <div class="sec"><div class="pad"><h2>Directions</h2><pre>${escapeHtml(r.directions||"")}</pre></div></div>
-    ${(r.notes && r.notes.trim()) ? `<div class="sec"><div class="pad"><h2>Notes</h2><pre>${escapeHtml(r.notes||"")}</pre></div></div>` : ""}
+    <div class="sec"><div class="pad"><h2>Ingredients</h2>${ingredientsHTML()}</div></div>
+    <div class="sec"><div class="pad"><h2>Directions</h2>${directionsHTML()}</div></div>
+    ${notesHTML}
   </div>
 </body>
 </html>`;
   }
 
+
   function downloadOne(){
     const r = getSelected();
     if(!r) return;
-    const html = recipeToStandaloneHTML(r);
+    const html = recipeToStandaloneHTML(r, state.scaleFactor || 1);
+
     const blob = new Blob([html], {type:"text/html"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1425,6 +1785,9 @@ function parseFirstNumberAnywhere(text){
     }
 
     refreshFilterOptions();
+    rebuildTagCaches();
+    refreshEditSuggestions();
+
 
     // Hook filters
     ["q","cuisineF","applianceF","maxTime","sort"].forEach(id=>{
@@ -1434,7 +1797,9 @@ function parseFirstNumberAnywhere(text){
 
     // Card size slider (inverted: right = bigger cards)
     $("size").addEventListener("input", applyCardSize);
+    window.addEventListener("resize", applyCardSize);
     applyCardSize();
+
 
     $("resetBtn").onclick = resetToSite;
     $("exportBtn").onclick = downloadJSON;
@@ -1452,12 +1817,25 @@ function parseFirstNumberAnywhere(text){
     $("editToggleBtn").onclick = toggleEdit;
     $("cancelEditBtn").onclick = toggleEdit;
     $("saveEditBtn").onclick = saveEdit;
+// Live-filter suggestions as you type in edit fields
+$("eCuisine").addEventListener("input", refreshEditSuggestions);
+$("eTags").addEventListener("input", refreshEditSuggestions);
+$("eCuisine").addEventListener("focus", refreshEditSuggestions);
+$("eTags").addEventListener("focus", refreshEditSuggestions);
+
     $("markCookedBtn").onclick = markCooked;
     $("deleteBtn").onclick = deleteRecipe;
     $("downloadOneBtn").onclick = downloadOne;
     $("printBtn").onclick = printOne;
     $("copyGroceriesBtn").onclick = copyGroceries;
     $("downloadGroceriesBtn").onclick = downloadGroceriesTxt;
+
+        // Cook mode
+    setCookMode(localStorage.getItem(COOKMODE_KEY) === "1");
+    $("cookModeBtn").onclick = ()=>{
+      setCookMode(!cookModeEnabled());
+    };
+
 
     // Scale controls
     $("scaleDown").onclick = ()=>{
@@ -1473,6 +1851,7 @@ function parseFirstNumberAnywhere(text){
 
       updateScaleUI();
       renderIngredients(r, state.scaleFactor);
+      persistCurrentScale();
     };
 
     $("scaleUp").onclick = ()=>{
@@ -1488,6 +1867,7 @@ function parseFirstNumberAnywhere(text){
 
       updateScaleUI();
       renderIngredients(r, state.scaleFactor);
+      persistCurrentScale();
     };
 
     $("scaleReset").onclick = ()=>{
@@ -1500,6 +1880,7 @@ function parseFirstNumberAnywhere(text){
 
       updateScaleUI();
       renderIngredients(r, state.scaleFactor);
+      persistCurrentScale();
     };
 
     $("scaleServingsTarget").addEventListener("input", ()=>{
@@ -1508,7 +1889,8 @@ function parseFirstNumberAnywhere(text){
 
       updateScaleUI();
       renderIngredients(r, state.scaleFactor);
-    });
+      persistCurrentScale();
+  });
 
 
     // Snackbar undo
@@ -1522,7 +1904,9 @@ function parseFirstNumberAnywhere(text){
     });
 
     renderGrid();
+    refreshEditSuggestions();
   }
+
 
   init();
 </script>
