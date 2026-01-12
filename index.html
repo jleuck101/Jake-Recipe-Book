@@ -376,7 +376,7 @@
       <div>
         <h1>Jake's Recipe Vault</h1>
         <div class="hint">
-          Big-photo gallery • Tap a recipe to open a clean cooking view • <span id="status"></span>
+          Big-photo gallery • Tap a recipe to open a clean cooking view • <span id="cloud"></span> <span id="status"></span>
         </div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
@@ -807,6 +807,16 @@ function refreshEditSuggestions(){
 
   function setStatus(msg){ $("status").textContent = msg ? ("— " + msg) : ""; }
   function toast(msg){ setStatus(msg); setTimeout(()=>setStatus(""), 1200); }
+
+  function setCloudStatus(){
+  const el = $("cloud");
+  if(!el) return;
+  const on = !!(window.FB && FB.enabled);
+  el.textContent = on
+    ? `cloud: yes • recipes: ${state.recipes.length}`
+    : `cloud: no • recipes: ${state.recipes.length}`;
+}
+
 
   // Snackbar (Undo)
   let snackTimer = null;
@@ -1911,7 +1921,7 @@ if(window.FB && FB.enabled){
       refreshFilterOptions();
       rebuildTagCaches();
       refreshEditSuggestions();
-      $("status").textContent = `cloud: ${window.FB ? "yes" : "no"} • recipes: ${state.recipes.length}`;
+      setCloudStatus();
       renderGrid();
       if(state.selectedId) renderViewer();
     });
@@ -2037,8 +2047,10 @@ $("eTags").addEventListener("focus", refreshEditSuggestions);
       }
     });
 
+    setCloudStatus();
     renderGrid();
     refreshEditSuggestions();
+
   }
 
 
