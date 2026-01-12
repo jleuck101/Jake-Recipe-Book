@@ -2804,6 +2804,22 @@ $("clearFiltersBtn").onclick = clearAllFilters;
   if(d) d.open = false;
 }
 
+// Close Advanced menu when clicking/tapping outside of it
+const advMenuEl = document.getElementById("advancedMenu");
+
+document.addEventListener("pointerdown", (e)=>{
+  if(!advMenuEl || !advMenuEl.open) return;
+  if(advMenuEl.contains(e.target)) return; // click is inside the menu
+  closeAdvancedMenu();
+}, true);
+
+// Also close Advanced menu on Escape
+window.addEventListener("keydown", (e)=>{
+  if(e.key === "Escape" && advMenuEl?.open){
+    closeAdvancedMenu();
+  }
+});
+
 
 $("restoreBtn").onclick = ()=>{
   $("importFile").value = "";
