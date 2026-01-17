@@ -67,6 +67,36 @@
   line-height:1;
 }
 
+.ingHdTop{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.toggleAllWrap{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.04);
+  cursor:pointer;
+  user-select:none;
+}
+.toggleAllWrap input{
+  width:16px;
+  height:16px;
+  cursor:pointer;
+}
+.toggleAllText{
+  font-size:12px;
+  font-weight:850;
+  line-height:1;
+  opacity:.9;
+}
+
 .scaleTools{
   display:flex;
   flex-direction:column;
@@ -624,30 +654,38 @@ body.gated #loginGate { display:flex !important; }
     </div>
 
     <div class="section">
-  <div class="sectionHd">
-    <div>
-      <div class="h2">Ingredients</div>
-      <div class="hint">Tap checkboxes as you cook (saved on this device)</div>
-    </div>
-
-    <div class="scaleTools" aria-label="Scale recipe">
-      <div class="scaleBtns">
-        <span class="pill">Scale</span>
-        <button class="btn btnSm" id="scaleDown" type="button" title="Decrease">−</button>
-        <button class="btn btnSm" id="scaleReset" type="button" title="Reset to 1×">1×</button>
-        <button class="btn btnSm" id="scaleUp" type="button" title="Increase">+</button>
+      <div class="sectionHd">
+        <div>
+          <div class="ingHdTop">
+            <div class="h2">Ingredients</div>
+            <label class="toggleAllWrap" title="Check/clear all ingredients">
+              <input type="checkbox" id="toggleAllIngCb" />
+              <span class="toggleAllText">Check all</span>
+            </label>
+            
+          </div>
+          <div class="hint">Tap checkboxes as you cook (saved on this device)</div>
+        </div>
+    
+        <div class="scaleTools" aria-label="Scale recipe">
+          <div class="scaleBtns">
+            <span class="pill">Scale</span>
+            <button class="btn btnSm" id="scaleDown" type="button" title="Decrease">−</button>
+            <button class="btn btnSm" id="scaleReset" type="button" title="Reset to 1×">1×</button>
+            <button class="btn btnSm" id="scaleUp" type="button" title="Increase">+</button>
+          </div>
+    
+          <div class="scaleServings" id="scaleServingsRow" style="display:none;">
+            <span class="muted">Servings</span>
+            <span id="scaleServingsBase" class="mono"></span>
+            <span class="muted">→</span>
+            <input id="scaleServingsTarget" class="scaleInput" type="number" min="0.5" step="0.5" inputmode="decimal" />
+          </div>
+    
+          <div class="hint" id="scaleMeta"></div>
+        </div>
       </div>
-
-      <div class="scaleServings" id="scaleServingsRow" style="display:none;">
-        <span class="muted">Servings</span>
-        <span id="scaleServingsBase" class="mono"></span>
-        <span class="muted">→</span>
-        <input id="scaleServingsTarget" class="scaleInput" type="number" min="0.5" step="0.5" inputmode="decimal" />
-      </div>
-
-      <div class="hint" id="scaleMeta"></div>
-    </div>
-  </div>
+    
 
   <div class="sectionBd">
     <div id="vIngredients"></div>
@@ -746,11 +784,26 @@ body.gated #loginGate { display:flex !important; }
 </div>
 
 
+<div style="margin-top:10px;">
+  <div class="k">Recipe image</div>
 
-        <div style="margin-top:10px;">
-          <div class="k">Image path</div>
-          <input id="eImageUrl" placeholder="images/yourfile.jpg"/>
-        </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <button class="btn small" id="addImageBtn" type="button">Add / Change image</button>
+    <button class="btn small danger" id="removeImageBtn" type="button" style="display:none;">Remove image</button>
+
+    <!-- iOS: this opens Photos and also offers Camera (capture is a hint) -->
+    <input id="imageFileInput" type="file" accept="image/*" capture="environment" style="display:none;" />
+  </div>
+
+  <img id="eImagePreview" alt="" style="display:none;max-width:100%;height:auto;margin-top:10px;border-radius:14px;border:1px solid var(--line);" />
+
+  <!-- keep these for saving -->
+  <input id="eImageUrl" style="display:none;" />
+  <input id="eImagePath" style="display:none;" />
+
+  <div class="hint" style="margin-top:6px;">On iPhone: choose from Photos or take a new picture.</div>
+</div>
+
 
         <div style="margin-top:10px;">
           <div class="k">Source URL</div>
@@ -806,6 +859,13 @@ body.gated #loginGate { display:flex !important; }
   signOut
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
+import {
+  getStorage,
+  ref as sRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js";
 
 
   const firebaseConfig = {
@@ -819,7 +879,9 @@ body.gated #loginGate { display:flex !important; }
   };
 
   const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
 
   // --- Auth (Google Sign-In) ---
 const auth = getAuth(app);
@@ -960,6 +1022,31 @@ window.AUTH = {
     }
   };
 
+  // --- Storage helpers (upload/delete recipe images) ---
+  window.FB.uploadRecipeImage = async ({ recipeId, file, filenameHint } = {}) => {
+
+    if(!_currentUser) throw new Error("Not signed in");
+    if(!recipeId) throw new Error("Missing recipeId");
+    if(!file) throw new Error("Missing file");
+
+    // Keep names safe-ish
+    const safeName = String(filenameHint || file.name || "image").replace(/[^\w.\-]+/g, "_");
+
+    const path = `recipeImages/${_currentUser.uid}/${recipeId}/${Date.now()}_${safeName}`;
+
+    const fileRef = sRef(storage, path);
+    await uploadBytes(fileRef, file, { contentType: file.type || "image/jpeg" });
+    const url = await getDownloadURL(fileRef);
+
+    return { url, path };
+  };
+
+  window.FB.deleteRecipeImage = async (path) => {
+    if(!_currentUser) throw new Error("Not signed in");
+    if(!path) return;
+    const fileRef = sRef(storage, path);
+    await deleteObject(fileRef);
+  };
 
 
 </script>
@@ -1725,6 +1812,45 @@ return out;
       localStorage.setItem(checksKey(recipeId), JSON.stringify(Array.from(set)));
     }catch{}
   }
+// Count only real ingredient items (exclude "## " headers)
+function countIngredientItems(lines){
+  return (lines || []).filter(l => !String(l).startsWith("## ")).length;
+}
+
+// Update the master checkbox state based on how many items are checked
+function updateToggleAllIngCb(totalCount, checkedSet){
+  const cb = $("toggleAllIngCb");
+  if(!cb) return;
+
+  const total = Number(totalCount || 0);
+  if(total <= 0){
+    cb.disabled = true;
+    cb.checked = false;
+    return;
+  }
+
+  cb.disabled = false;
+  const checkedN = (checkedSet instanceof Set) ? checkedSet.size : 0;
+  cb.checked = (checkedN >= total);
+}
+
+// Set/clear ALL ingredient checks for the currently viewed recipe
+function setAllIngredientChecks(shouldCheck){
+  const r = getSelected();
+  if(!r) return;
+
+  const lines = parseIngredientLines(r.ingredients);
+  const totalCount = countIngredientItems(lines);
+  if(totalCount <= 0) return;
+
+  const next = new Set();
+  if(shouldCheck){
+    for(let i=0;i<totalCount;i++) next.add(String(i));
+  }
+
+  saveChecks(r.id, next);
+  renderIngredients(r, state.scaleFactor);
+}
 
     // Scale persistence helpers
   function loadScaleMap(){
@@ -1921,8 +2047,18 @@ function parseFirstNumberAnywhere(text){
       return;
     }
 
-    const checked = loadChecks(r.id);
+    const totalCount = countIngredientItems(lines);
+
+    // Load + clean checked set so it matches current ingredient count
+    const rawChecked = loadChecks(r.id);
+    const checked = new Set(Array.from(rawChecked).filter(k=>{
+      const n = Number(k);
+      return Number.isFinite(n) && n >= 0 && n < totalCount;
+    }));
+    if(checked.size !== rawChecked.size) saveChecks(r.id, checked);
+
     let itemIndex = 0;
+
 
     const ul = document.createElement("div");
     ul.className = "ingList";
@@ -1950,12 +2086,24 @@ function parseFirstNumberAnywhere(text){
 
 
       cb.addEventListener("change", ()=>{
-        const set = loadChecks(r.id);
+        const set = new Set(loadChecks(r.id));
         if(cb.checked) set.add(key);
         else set.delete(key);
-        saveChecks(r.id, set);
+
+        // keep only valid keys (0..totalCount-1)
+        const cleaned = new Set(Array.from(set).filter(k=>{
+          const n = Number(k);
+          return Number.isFinite(n) && n >= 0 && n < totalCount;
+        }));
+
+        saveChecks(r.id, cleaned);
         txt.classList.toggle("checked", cb.checked);
+
+        // keep master checkbox in sync
+        updateToggleAllIngCb(totalCount, cleaned);
       });
+
+
 
       row.appendChild(cb);
       row.appendChild(txt);
@@ -1965,6 +2113,8 @@ function parseFirstNumberAnywhere(text){
     }
 
     host.appendChild(ul);
+    updateToggleAllIngCb(totalCount, checked);
+
   }
 
   function renderViewer(){
@@ -2055,6 +2205,54 @@ if(toList(r.mainIngredient).length) info.appendChild(pill("ingredient: " + listT
     }
   }
 
+  function setEditImagePreview(url){
+  const img = $("eImagePreview");
+  const rm = $("removeImageBtn");
+  if(!img) return;
+
+  if(url){
+    img.src = url;
+    img.style.display = "block";
+    if(rm) rm.style.display = "";
+  }else{
+    img.removeAttribute("src");
+    img.style.display = "none";
+    if(rm) rm.style.display = "none";
+  }
+}
+
+async function compressImageFile(file, maxDim=1600, quality=0.72){
+  // If it’s already small, don’t bother
+  const maxBytes = 900 * 1024; // ~0.9MB target before we stop trying
+  if(file.size <= maxBytes) return file;
+
+  const img = await new Promise((res, rej)=>{
+    const i = new Image();
+    i.onload = ()=> res(i);
+    i.onerror = rej;
+    i.src = URL.createObjectURL(file);
+  });
+
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const scale = Math.min(1, maxDim / Math.max(w,h));
+  const nw = Math.max(1, Math.round(w * scale));
+  const nh = Math.max(1, Math.round(h * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = nw; canvas.height = nh;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, nw, nh);
+
+  URL.revokeObjectURL(img.src);
+
+  const blob = await new Promise(res=> canvas.toBlob(res, "image/jpeg", quality));
+  if(!blob) return file;
+
+  // return as a File so it behaves like an uploadable file
+  return new File([blob], "recipe.jpg", { type: "image/jpeg" });
+}
+
 
   /* Editing (only on demand) */
   function fillEditForm(r){
@@ -2069,6 +2267,9 @@ $("eIngredient").value = listToDisplay(r.mainIngredient);
     $("eDishes").value = r.dishesCount ?? "";
     $("eTags").value = (r.tags||[]).join(", ");
     $("eImageUrl").value = r.imageUrl || "";
+    if($("eImagePath")) $("eImagePath").value = r.imagePath || "";
+    setEditImagePreview(r.imageUrl || "");
+
     $("eSourceUrl").value = r.sourceUrl || "";
     $("eServings").value = r.servings || "";
     $("eIngredients").value = r.ingredients || "";
@@ -2122,6 +2323,8 @@ $("eIngredient").value = listToDisplay(r.mainIngredient);
       dishesCount: $("eDishes").value ? Number($("eDishes").value) : null,
       tags: canonicalList($("eTags").value),
       imageUrl: $("eImageUrl").value.trim(),
+      imagePath: $("eImagePath") ? $("eImagePath").value.trim() : (state.recipes[idx].imagePath || ""),
+
       sourceUrl: $("eSourceUrl").value.trim(),
       servings: $("eServings").value.trim(),
       ingredients: $("eIngredients").value.trim(),
@@ -2888,6 +3091,120 @@ Normal edits auto-sync.`;
     $("editToggleBtn").onclick = toggleEdit;
     $("cancelEditBtn").onclick = toggleEdit;
     $("saveEditBtn").onclick = saveEdit;
+
+    // --- Image upload (Firebase Storage) ---
+    const addBtn = $("addImageBtn");
+    const rmBtn  = $("removeImageBtn");
+    const fileIn = $("imageFileInput");
+
+    if(addBtn && fileIn){
+      addBtn.onclick = ()=> fileIn.click();
+
+      fileIn.onchange = async ()=>{
+        const file = fileIn.files && fileIn.files[0];
+        if(!file) return;
+
+        const r = getSelected();
+        if(!r) return;
+
+        // Basic guard: huge photos can be slow (you can add compression later)
+        const maxMB = 12;
+        if(file.size > maxMB * 1024 * 1024){
+          alert(`That photo is bigger than ${maxMB}MB. Choose a smaller one (or we’ll add compression).`);
+          fileIn.value = "";
+          return;
+        }
+
+        try{
+          addBtn.disabled = true;
+          addBtn.textContent = "Uploading…";
+
+          const prevPath = $("eImagePath") ? $("eImagePath").value.trim() : (r.imagePath || "");
+
+// Compress before upload (fast + cheap)
+const compressed = await compressImageFile(file, 1600, 0.72);
+const out = await window.FB.uploadRecipeImage({
+  recipeId: r.id,
+  file: compressed,
+  filenameHint: file.name
+});
+
+
+          // Save into edit fields immediately
+          $("eImageUrl").value = out.url;
+          if($("eImagePath")) $("eImagePath").value = out.path;
+
+          setEditImagePreview(out.url);
+
+          // OPTIONAL BUT RECOMMENDED: delete old file after new upload succeeds
+          if(prevPath && prevPath !== out.path){
+            try{ await window.FB.deleteRecipeImage(prevPath); }catch(e){ console.warn("Old image delete failed:", e); }
+          }
+
+          // Update recipe immediately + sync (so you don’t forget to hit Save)
+          const idx = state.recipes.findIndex(x=>x.id===r.id);
+          if(idx >= 0){
+            state.recipes[idx].imageUrl = out.url;
+            state.recipes[idx].imagePath = out.path;
+            state.recipes[idx].updatedAt = Date.now();
+            saveLocal();
+            renderGrid();
+            renderViewer();
+            toast("image saved");
+          }
+        }catch(e){
+          console.error(e);
+          alert("Upload failed. Are you signed in and online?");
+        }finally{
+          addBtn.disabled = false;
+          addBtn.textContent = "Add / Change image";
+          fileIn.value = "";
+        }
+      };
+    }
+
+    if(rmBtn){
+      rmBtn.onclick = async ()=>{
+        const r = getSelected();
+        if(!r) return;
+
+        const path = $("eImagePath") ? $("eImagePath").value.trim() : (r.imagePath || "");
+        if(!path && !($("eImageUrl")?.value||"").trim()){
+          setEditImagePreview("");
+          return;
+        }
+
+        if(!confirm("Remove this recipe image?")) return;
+
+        try{
+          rmBtn.disabled = true;
+          rmBtn.textContent = "Removing…";
+
+          if(path){
+            try{ await window.FB.deleteRecipeImage(path); }catch(e){ console.warn("Delete failed:", e); }
+          }
+
+          $("eImageUrl").value = "";
+          if($("eImagePath")) $("eImagePath").value = "";
+          setEditImagePreview("");
+
+          const idx = state.recipes.findIndex(x=>x.id===r.id);
+          if(idx >= 0){
+            state.recipes[idx].imageUrl = "";
+            state.recipes[idx].imagePath = "";
+            state.recipes[idx].updatedAt = Date.now();
+            saveLocal();
+            renderGrid();
+            renderViewer();
+            toast("image removed");
+          }
+        }finally{
+          rmBtn.disabled = false;
+          rmBtn.textContent = "Remove image";
+        }
+      };
+    }
+
 // Live-filter suggestions as you type in edit fields
 ["eCuisine","eCourse","eBase","eIngredient","eAppliances","eTags"].forEach(id=>{
   const el = $(id);
@@ -2903,6 +3220,13 @@ Normal edits auto-sync.`;
     $("printBtn").onclick = printCard;
     $("copyGroceriesBtn").onclick = copyGroceries;
     $("downloadGroceriesBtn").onclick = downloadGroceriesTxt;
+
+    // Master "check all" checkbox
+    const master = $("toggleAllIngCb");
+    if(master){
+      master.onchange = ()=> setAllIngredientChecks(master.checked);
+    }
+
 
         // Cook mode
     setCookMode(localStorage.getItem(COOKMODE_KEY) === "1");
