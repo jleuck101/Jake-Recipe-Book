@@ -489,6 +489,37 @@ body.gated #loginGate { display:flex !important; }
   min-width: 180px;
 }
 
+/* Paste recipe modal */
+.pasteModal{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.65);
+  display:none;
+  z-index:140;
+  padding:16px;
+  align-items:center;
+  justify-content:center;
+}
+.pasteModal.show{ display:flex; }
+.pasteCard{
+  width:min(900px, 100%);
+  background:rgba(18,20,27,.96);
+  border:1px solid var(--line);
+  border-radius:16px;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+.pasteCardHd{
+  padding:12px;
+  border-bottom:1px solid var(--line);
+  background:rgba(23,26,35,.55);
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+}
+.pasteCardBd{ padding:12px; }
+#pasteRecipeText{ min-height:260px; max-height:60vh; }
 
 
   </style>
@@ -521,9 +552,21 @@ body.gated #loginGate { display:flex !important; }
           
         </details>
         
+        <details id="importMenu" class="advMenu">
+          <summary class="btn">Import</summary>
+          <div class="advPanel">
+            <button class="btn" id="pasteRecipeActionBtn" type="button">Paste recipe</button>
+            <button class="btn" id="importHtmlActionBtn" type="button">Import HTML</button>
+          </div>
+        </details>
+
         <button class="btn primary" id="newBtn">+ New</button>
+
         
         <input id="importFile" type="file" accept="application/json" style="display:none" />
+        <input id="importHtmlFile" type="file" accept=".html,text/html" style="display:none" />
+        
+        
       </div>
       
     </div>
@@ -831,6 +874,30 @@ body.gated #loginGate { display:flex !important; }
     <div class="viewerFooterSpace"></div>
   </div>
 </div>
+
+<!-- Paste Recipe modal -->
+<div id="pasteModal" class="pasteModal" aria-hidden="true">
+  <div class="pasteCard" role="dialog" aria-modal="true" aria-label="Paste recipe">
+    <div class="pasteCardHd">
+      <div>
+        <div class="h2">Paste recipe</div>
+        <div class="hint">Paste from ChatGPT or anywhere. Headings like “Ingredients:” and “Directions:” help.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn small" id="pasteCancelBtn" type="button">Cancel</button>
+        <button class="btn small primary" id="pasteImportBtn" type="button">Import</button>
+      </div>
+    </div>
+    <div class="pasteCardBd">
+      <div class="k">Recipe text</div>
+      <textarea id="pasteRecipeText" placeholder="Paste the whole recipe here…"></textarea>
+      <div class="hint" style="margin-top:8px;">
+        Examples it understands: “Ingredients:”, “Directions: / Instructions: / Method:”, “Notes:”
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Snackbar -->
 <div id="snack" class="snack" aria-live="polite">
@@ -2776,6 +2843,218 @@ function printCard(){
     toast("downloaded groceries");
   }
 
+// ---- Paste Recipe (text -> structured recipe) ----
+function openPasteModal(){
+  const m = $("pasteModal");
+  const t = $("pasteRecipeText");
+  if(!m || !t) return;
+  t.value = "";
+  m.classList.add("show");
+  m.setAttribute("aria-hidden","false");
+  setTimeout(()=>t.focus(), 50);
+}
+
+function closePasteModal(){
+  const m = $("pasteModal");
+  if(!m) return;
+  m.classList.remove("show");
+  m.setAttribute("aria-hidden","true");
+}
+
+function looksLikeSubheading(line){
+  const s = String(line||"").trim();
+  if(!s) return false;
+  if(s.length > 60) return false;
+  if(/^\d+[\.\)]\s+/.test(s)) return false;
+  // "For the sauce:" / "Sauce:" / "Optional:"
+  return /:\s*$/.test(s);
+}
+
+function stripBullet(line){
+  return String(line||"").replace(/^[-*•]\s+/, "").trim();
+}
+
+function stripHeadingLabel(line){
+  // removes "Ingredients:", "Directions:", etc.
+  return String(line||"").replace(/^\s*[A-Za-z ]+:\s*$/, "").trim();
+}
+
+function findSectionIndex(lines, re){
+  for(let i=0;i<lines.length;i++){
+    const s = String(lines[i]||"").trim().toLowerCase();
+    if(re.test(s)) return i;
+  }
+  return -1;
+}
+
+function cleanIngredientsLines(lines){
+  const out = [];
+  for(const raw of (lines || [])){
+    let s = String(raw||"").trim();
+    if(!s) continue;
+
+    // Skip obvious heading labels repeated inside the block
+    if(/^(ingredients?)\s*:?\s*$/.test(s.toLowerCase())) continue;
+
+    if(looksLikeSubheading(s)){
+      out.push("## " + s.replace(/:\s*$/,"").trim());
+      continue;
+    }
+    out.push(stripBullet(s));
+  }
+  return out.join("\n").trim();
+}
+
+function cleanDirectionsLines(lines){
+  const out = [];
+  for(const raw of (lines || [])){
+    let s = String(raw||"").trim();
+    if(!s) continue;
+
+    if(/^(directions?|instructions?|method|steps?)\s*:?\s*$/.test(s.toLowerCase())) continue;
+
+    if(looksLikeSubheading(s)){
+      out.push("## " + s.replace(/:\s*$/,"").trim());
+      continue;
+    }
+
+    s = stripBullet(s);
+    s = stripLeadingStepNumber(s);
+    out.push(s);
+  }
+  return out.join("\n").trim();
+}
+
+function parsePastedRecipeText(raw){
+  let text = String(raw||"").replace(/\r/g,"").trim();
+  text = text.replace(/\n{3,}/g, "\n\n");
+  if(!text) return null;
+
+  const lines = text.split("\n");
+
+  // Optional "Title: ..."
+  const titleLineMatch = text.match(/^\s*(?:title|recipe)\s*:\s*(.+)\s*$/im);
+  let title = titleLineMatch ? String(titleLineMatch[1]||"").trim() : "";
+
+  const iIng = findSectionIndex(lines, /^(ingredients?|what you(?:'|)ll need)\b/);
+  const iDir = findSectionIndex(lines, /^(directions?|instructions?|method|steps?)\b/);
+  const iNotes = findSectionIndex(lines, /^(notes?|tips?)\b/);
+
+  // Title heuristics if not explicitly set
+  if(!title){
+    if(iIng > 0){
+      const pre = lines.slice(0, iIng).map(s=>String(s||"").trim()).filter(Boolean);
+      if(pre.length){
+        title = pre[0].replace(/^#+\s*/,"").trim();
+      }
+    }else{
+      const first = String(lines[0]||"").trim();
+      if(first && first.length <= 90) title = first.replace(/^#+\s*/,"").trim();
+    }
+  }
+  if(!title) title = "Imported Recipe";
+
+  // Compute section slices
+  const end = lines.length;
+
+  const ingStart = (iIng >= 0) ? iIng + 1 : -1;
+  const dirStart = (iDir >= 0) ? iDir + 1 : -1;
+  const notesStart = (iNotes >= 0) ? iNotes + 1 : -1;
+
+  const cut = (a,b)=> (a>=0 ? lines.slice(a, Math.max(a, b>=0?b:end)) : []);
+  const nextAfter = (idx)=> {
+    const candidates = [iIng, iDir, iNotes].filter(x=>x>=0 && x>idx);
+    return candidates.length ? Math.min(...candidates) : -1;
+  };
+
+  let ingLines = [];
+  let dirLines = [];
+  let notesLines = [];
+
+  if(iIng >= 0){
+    ingLines = cut(ingStart, nextAfter(iIng));
+  }
+  if(iDir >= 0){
+    dirLines = cut(dirStart, nextAfter(iDir));
+  }
+  if(iNotes >= 0){
+    notesLines = cut(notesStart, -1);
+  }
+
+  // No explicit headings: try to infer split point at first numbered step
+  if(iIng < 0 && iDir < 0){
+    // remove title line from body if we used it
+    let bodyLines = lines.slice(1);
+    const stepIdx = bodyLines.findIndex(l => /^\s*\d+[\.\)]\s+/.test(String(l||"")));
+    if(stepIdx >= 0){
+      ingLines = bodyLines.slice(0, stepIdx);
+      dirLines = bodyLines.slice(stepIdx);
+    }else{
+      // fallback: treat all as directions if it reads like paragraphs, else ingredients
+      const manyShort = bodyLines.filter(l => String(l||"").trim().length > 0 && String(l||"").trim().length <= 60).length;
+      const totalNonEmpty = bodyLines.filter(l => String(l||"").trim()).length;
+      if(totalNonEmpty && manyShort / totalNonEmpty > 0.7){
+        ingLines = bodyLines;
+      }else{
+        dirLines = bodyLines;
+      }
+    }
+  }
+
+  const ingredients = cleanIngredientsLines(ingLines);
+  const directions = cleanDirectionsLines(dirLines);
+
+  const notes = (notesLines || []).map(s=>String(s||"").trim()).filter(Boolean).join("\n").trim();
+
+  return { title, ingredients, directions, notes };
+}
+
+function importRecipeFromPastedText(raw){
+  const parsed = parsePastedRecipeText(raw);
+  if(!parsed) return null;
+
+  const t = Date.now();
+  const r = {
+    id: uid(),
+    title: parsed.title || "Imported Recipe",
+    cuisine: "",
+    course: "",
+    base: "",
+    mainIngredient: "",
+    appliances: [],
+    timeMinutes: null,
+    dishesCount: null,
+    tags: [],
+    cookedCount: 0,
+    lastCookedAt: null,
+    createdAt: t,
+    updatedAt: t,
+    imageUrl: "",
+    imagePath: "",
+    sourceUrl: "",
+    servings: "",
+    ingredients: parsed.ingredients || "",
+    directions: parsed.directions || "",
+    notes: parsed.notes || ""
+  };
+
+  state.recipes.unshift(r);
+  saveLocal();
+  refreshFilterOptions();
+  renderGrid();
+  openViewer(r.id);
+
+  // Auto-open edit so you can clean up anything
+  state.editOpen = true;
+  $("editPanel").classList.add("show");
+  $("editToggleBtn").textContent = "Close edit";
+  fillEditForm(r);
+
+  toast("pasted recipe imported");
+  return r;
+}
+
+
   /* Data import/export */
   function downloadJSON(){
     const blob=new Blob([JSON.stringify(state.recipes,null,2)], {type:"application/json"});
@@ -2997,6 +3276,55 @@ $("clearFiltersBtn").onclick = clearAllFilters;
 
     $("newBtn").onclick = newRecipe;
 
+    // Import menu actions
+    $("pasteRecipeActionBtn").onclick = ()=>{
+      openPasteModal();
+      closeImportMenu();
+    };
+
+    $("importHtmlActionBtn").onclick = ()=>{
+      const f = $("importHtmlFile");
+      if(f){
+        f.value = "";
+        f.click();
+      }
+      closeImportMenu();
+    };
+
+
+$("pasteCancelBtn")?.addEventListener("click", closePasteModal);
+
+$("pasteModal")?.addEventListener("pointerdown", (e)=>{
+  // clicking the dark background closes; clicking the card does not
+  if(e.target && e.target.id === "pasteModal") closePasteModal();
+});
+
+$("pasteImportBtn")?.addEventListener("click", ()=>{
+  const raw = $("pasteRecipeText")?.value || "";
+  if(!raw.trim()){
+    alert("Paste a recipe first.");
+    return;
+  }
+  try{
+    importRecipeFromPastedText(raw);
+    closePasteModal();
+  }catch(e){
+    console.warn(e);
+    alert("Paste import failed. Try including headings like Ingredients: and Directions: to help parsing.");
+  }
+});
+
+// Ctrl/Cmd+Enter to import
+$("pasteRecipeText")?.addEventListener("keydown", (e)=>{
+  const mac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+  const mod = mac ? e.metaKey : e.ctrlKey;
+  if(mod && e.key === "Enter"){
+    e.preventDefault();
+    $("pasteImportBtn")?.click();
+  }
+});
+
+
     $("backupBtn").onclick = ()=>{
       downloadJSON();
       closeAdvancedMenu();
@@ -3007,22 +3335,27 @@ $("clearFiltersBtn").onclick = clearAllFilters;
   const d = document.getElementById("advancedMenu");
   if(d) d.open = false;
 }
+function closeImportMenu(){
+  const d = document.getElementById("importMenu");
+  if(d) d.open = false;
+}
 
-// Close Advanced menu when clicking/tapping outside of it
 const advMenuEl = document.getElementById("advancedMenu");
+const importMenuEl = document.getElementById("importMenu");
 
+// Close menus when clicking/tapping outside
 document.addEventListener("pointerdown", (e)=>{
-  if(!advMenuEl || !advMenuEl.open) return;
-  if(advMenuEl.contains(e.target)) return; // click is inside the menu
-  closeAdvancedMenu();
+  if(advMenuEl?.open && !advMenuEl.contains(e.target)) closeAdvancedMenu();
+  if(importMenuEl?.open && !importMenuEl.contains(e.target)) closeImportMenu();
 }, true);
 
-// Also close Advanced menu on Escape
+// Close menus on Escape
 window.addEventListener("keydown", (e)=>{
-  if(e.key === "Escape" && advMenuEl?.open){
-    closeAdvancedMenu();
-  }
+  if(e.key !== "Escape") return;
+  if(advMenuEl?.open) closeAdvancedMenu();
+  if(importMenuEl?.open) closeImportMenu();
 });
+
 
 
 $("restoreBtn").onclick = ()=>{
@@ -3044,6 +3377,112 @@ $("importFile").addEventListener("change", async ()=>{
     alert("Restore failed (bad JSON).");
   }
 });
+
+// ---- Import HTML recipe (from this app's "Download recipe" export) ----
+function extractSectionLines(doc, headingText, listTag){
+  const hs = Array.from(doc.querySelectorAll("h2"));
+  const h2 = hs.find(x => (x.textContent || "").trim().toLowerCase() === headingText.toLowerCase());
+  if(!h2) return [];
+
+  const pad = h2.parentElement; // in your exported HTML, h2 sits inside .pad
+  if(!pad) return [];
+
+  const out = [];
+
+  // Walk siblings after the H2: UL/OL and possible H3 section headers
+  let node = h2.nextElementSibling;
+  while(node){
+    const tag = node.tagName?.toLowerCase();
+
+    if(tag === "h2") break; // next major section
+    if(tag === "h3"){
+      const t = (node.textContent || "").trim();
+      if(t) out.push("## " + t);
+    }
+    if(tag === (listTag || "ul")){
+      const items = Array.from(node.querySelectorAll("li")).map(li => (li.textContent || "").trim()).filter(Boolean);
+      out.push(...items);
+    }
+
+    node = node.nextElementSibling;
+  }
+
+  return out;
+}
+
+async function importRecipeFromHTMLFile(file){
+  const html = await file.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const title = (doc.querySelector("h1")?.textContent || file.name.replace(/\.html?$/i,"") || "Imported Recipe").trim();
+
+  // Try to grab image + source (from your exported HTML)
+  const imageUrl = (doc.querySelector("img")?.getAttribute("src") || "").trim();
+  const sourceLink = Array.from(doc.querySelectorAll("a")).find(a => (a.textContent || "").toLowerCase().includes("http"));
+  const sourceUrl = (sourceLink?.getAttribute("href") || "").trim();
+
+  const ingLines = extractSectionLines(doc, "Ingredients", "ul");
+  const dirLines = extractSectionLines(doc, "Directions", "ol");
+
+  // Notes (optional)
+  let notes = (doc.querySelector(".notes pre")?.textContent || "").trim();
+  if(!notes){
+    // fallback: any "Notes" section
+    const h2Notes = Array.from(doc.querySelectorAll("h2")).find(x => (x.textContent||"").trim().toLowerCase() === "notes");
+    if(h2Notes) notes = (h2Notes.parentElement?.querySelector("pre")?.textContent || "").trim();
+  }
+
+  const t = Date.now();
+  const r = {
+    id: uid(),
+    title,
+    cuisine: "",
+    course: "",
+    base: "",
+    mainIngredient: "",
+    appliances: [],
+    timeMinutes: null,
+    dishesCount: null,
+    tags: [],
+    cookedCount: 0,
+    lastCookedAt: null,
+    createdAt: t,
+    updatedAt: t,
+    imageUrl: imageUrl || "",
+    imagePath: "",          // importing HTML doesn't bring a Firebase Storage path
+    sourceUrl: sourceUrl || "",
+    servings: "",
+    ingredients: ingLines.join("\n"),
+    directions: dirLines.join("\n"),
+    notes: notes || ""
+  };
+
+  state.recipes.unshift(r);
+  saveLocal();
+  refreshFilterOptions();
+  renderGrid();
+  openViewer(r.id);
+  toast("imported HTML");
+}
+
+// HTML file input wiring (button is handled above in Import menu actions)
+const importHtmlFile = $("importHtmlFile");
+if(importHtmlFile){
+  importHtmlFile.addEventListener("change", async ()=>{
+    const f = importHtmlFile.files?.[0];
+    if(!f) return;
+    try{
+      await importRecipeFromHTMLFile(f);
+    }catch(e){
+      console.warn(e);
+      alert("HTML import failed. This importer currently expects the HTML exported by your own app (Download recipe).");
+    }finally{
+      importHtmlFile.value = "";
+    }
+  });
+}
+
+
 
 $("signOutBtn").onclick = async ()=>{
   if(!confirm("Sign out on this device? You can sign back in anytime.")) return;
