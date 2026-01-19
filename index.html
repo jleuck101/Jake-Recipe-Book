@@ -911,14 +911,17 @@ body.gated #loginGate { display:flex !important; }
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
   import {
-    getFirestore,
-    collection,
-    getDocs,
-    writeBatch,
-    doc,
-    onSnapshot,
-    query
-  } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+  getFirestore,
+  collection,
+  getDocs,
+  writeBatch,
+  doc,
+  onSnapshot,
+  query,
+  setDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
 
   import {
   getAuth,
@@ -1090,8 +1093,29 @@ window.AUTH = {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         onData(list);
       });
+    },
+
+    async addInboxUrl({ url, title = "", source = "ios-shortcut" } = {}){
+      if(!_currentUser) throw new Error("Not signed in");
+      if(!url) throw new Error("Missing url");
+
+      const id = (crypto.randomUUID ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+      const col = collection(db, "importInbox");
+      await setDoc(doc(col, id), {
+        uid: _currentUser.uid,
+        url: String(url),
+        title: String(title || ""),
+        source: String(source || ""),
+        status: "new",
+        createdAt: serverTimestamp()
+      });
+
+      return id;
     }
   };
+
 
   // --- Storage helpers (upload/delete recipe images) ---
   window.FB.uploadRecipeImage = async ({ recipeId, file, filenameHint } = {}) => {
@@ -1445,6 +1469,64 @@ function refreshEditSuggestions(){
 
   function setStatus(msg){ $("status").textContent = msg ? ("— " + msg) : ""; }
   function toast(msg){ setStatus(msg); setTimeout(()=>setStatus(""), 1200); }
+
+  const PENDING_SHARE_KEY = "rv.pendingShare.v1";
+
+function _readIncomingShare(){
+  const u = new URL(location.href);
+  const url = u.searchParams.get("shareUrl") || u.searchParams.get("url") || "";
+  const title = u.searchParams.get("shareTitle") || u.searchParams.get("title") || "";
+  if(!url) return null;
+  return { url, title };
+}
+
+function _clearIncomingShareFromURL(){
+  const u = new URL(location.href);
+  ["shareUrl","url","shareTitle","title"].forEach(k => u.searchParams.delete(k));
+  history.replaceState({}, "", u.toString());
+}
+
+async function processPendingShare(){
+  const user = window._getCurrentUser?.();
+  const raw = localStorage.getItem(PENDING_SHARE_KEY);
+  if(!user || !raw) return false;
+
+  let share = null;
+  try { share = JSON.parse(raw); } catch {}
+  if(!share?.url){
+    localStorage.removeItem(PENDING_SHARE_KEY);
+    return false;
+  }
+
+  try{
+    await window.FB.addInboxUrl({ url: share.url, title: share.title, source: "ios" });
+    localStorage.removeItem(PENDING_SHARE_KEY);
+    toast("saved shared link");
+    return true;
+  }catch(e){
+    console.warn("Inbox save failed:", e);
+    toast("couldn't save share");
+    return false;
+  }
+}
+
+async function captureIncomingShareIfPresent(){
+  const share = _readIncomingShare();
+  if(!share) return false;
+
+  localStorage.setItem(PENDING_SHARE_KEY, JSON.stringify(share));
+  _clearIncomingShareFromURL();
+
+  const user = window._getCurrentUser?.();
+  if(user) return await processPendingShare();
+
+  toast("link captured — sign in");
+  return true;
+}
+
+
+
+
 
   function setSyncBadge(mode, text){
   const el = $("syncBadge");
@@ -3225,8 +3307,12 @@ function importRecipeFromPastedText(raw){
   // Signed out: keep data in memory/localStorage, but don't show it
   if(!user) return;
 
+  // If we were opened via ?shareUrl=..., save it now that we're signed in
+  await processPendingShare();
+
   // Signed in: run cloud sync immediately + render
   try{
+
     const cloud = await window.FB.loadAll();
 
     if(Array.isArray(cloud) && cloud.length){
@@ -3255,6 +3341,9 @@ function importRecipeFromPastedText(raw){
         .register("sw.js", { scope: "./" })
         .catch(() => {});
 }
+
+await captureIncomingShareIfPresent();
+
 
 // Fast start: local cache only (offline-capable after first signed-in load)
 const local = loadLocal();
