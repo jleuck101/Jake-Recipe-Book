@@ -456,6 +456,8 @@ body.gated #overlay { display:none !important; }
 
 body.gated #headerControls { display:none !important; }
 body.gated #loginGate { display:flex !important; }
+body.denied #accessDeniedMsg{ display:block !important; }
+
 
 /* Header Advanced menu dropdown (separate from Advanced filters panel) */
 .advMenu{
@@ -578,6 +580,9 @@ body.gated #loginGate { display:flex !important; }
     <h2 style="margin:0 0 8px;font-size:24px;letter-spacing:.2px">Jake's Recipe Book</h2>
     <div class="hint" style="margin:0 0 10px">Sign in to view and edit recipes.</div>
 <div class="hint" style="margin:0 0 14px">First sign-in on a new device requires internet. After that, this device can work offline.</div>
+<div id="accessDeniedMsg" class="hint" style="display:none;margin:14px 0 0;color:rgba(239,68,68,.95);font-weight:900">
+  Access denied. This Google account isn’t on the allow list.
+</div>
 
     <div id="loginGateBtnHost" style="display:flex;justify-content:center"></div>
   </div>
@@ -1153,6 +1158,33 @@ window.AUTH = {
 
   // Per-recipe last-used scaling (saved on this device)
   const SCALE_STORE_KEY = "rb.scaleById.v1";
+
+
+
+  // ---- ACCESS CONTROL (UI gate; Firebase rules are the real security) ----
+const OWNER_EMAIL = "jakeleuck101@gmail.com";
+const ALLOWED_EMAILS = new Set([
+  "jakeleuck101@gmail.com",
+  "sethleuck5@gmail.com"
+].map(e => e.toLowerCase()));
+
+function userEmail(user){
+  return String(user?.email || user?.providerData?.[0]?.email || "").toLowerCase();
+}
+function isAllowedUser(user){
+  const e = userEmail(user);
+  return !!e && ALLOWED_EMAILS.has(e);
+}
+function isOwnerUser(user){
+  return userEmail(user) === OWNER_EMAIL.toLowerCase();
+}
+
+function setDenied(on){
+  document.body.classList.toggle("denied", !!on);
+  const m = document.getElementById("accessDeniedMsg");
+  if(m) m.style.display = on ? "" : "none";
+}
+
   
   const $ = (id)=>document.getElementById(id);
 
@@ -3368,10 +3400,21 @@ function importRecipeFromPastedText(raw){
   }
 
   window.__onAuthChange = async (user)=>{
-  setGate(!user);
+    const allowed = !!(user && isAllowedUser(user));
+    setGate(!allowed);
+    setDenied(!!(user && !allowed));
 
-  // Signed out: keep data in memory/localStorage, but don't show it
-  if(!user) return;
+    if(user && !allowed){
+      try { await window._doSignOut(); } catch(e){}
+      return;
+    }
+
+    // Signed out: keep data in memory/localStorage, but don't show it
+    if(!user) return;
+
+    // Allowed user
+    setDenied(false);
+
 
   // If we were opened via ?shareUrl=..., save it now that we're signed in
   await processPendingShare();
@@ -3434,12 +3477,21 @@ if (window.FB && window.FB.enabled) {
   await (window._authInit || Promise.resolve(null));
   const user = window._getCurrentUser ? window._getCurrentUser() : null;
 
-  setGate(!user);
+  const allowed = !!(user && isAllowedUser(user));
+  setGate(!allowed);
+  setDenied(!!(user && !allowed));
+
+  if(user && !allowed){
+    try { await window._doSignOut(); } catch(e){}
+  }
+
+
 
 // IMPORTANT: do NOT return here.
 // We still need to finish init() so all event listeners/buttons are wired up.
 // When the user signs in, __onAuthChange will load + render recipes.
-if(!user){
+if(!allowed){
+
   setCloudStatus();
   renderGrid(); // (won't be visible because gated, but keeps state sane)
 } else {
@@ -3451,7 +3503,8 @@ if(!user){
   // Cloud-only session behavior:
   // - Signed out: keep local cache (for this device), but do not attempt cloud.
   // - Signed in: render immediately from local cache (offline-friendly), then pull cloud and subscribe.
-  if (!user) {
+  if(!allowed){
+
     console.warn("Not signed in; skipping cloud sync.");
     toast("sign in to sync");
     setCloudStatus?.();
