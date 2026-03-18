@@ -456,18 +456,6 @@
     body.cookMode .sectionBd{ padding: 14px; }
     body.cookMode .ingItem{ padding: 12px 12px; }
     body.cookMode .ingItem input{ transform: scale(1.35); }
-
-
-
-    body.gated main,
-body.gated #viewer,
-body.gated #overlay { display:none !important; }
-
-body.gated #headerControls { display:none !important; }
-body.gated #loginGate { display:flex !important; }
-body.denied #accessDeniedMsg{ display:block !important; }
-
-
 /* Header Advanced menu dropdown (separate from Advanced filters panel) */
 .advMenu{
   position: relative;
@@ -583,20 +571,6 @@ body.denied #accessDeniedMsg{ display:block !important; }
     </div>
   </div>
 </header>
-
-<div id="loginGate" style="display:none;min-height:calc(100vh - 60px);align-items:center;justify-content:center;text-align:center;padding:28px">
-  <div style="max-width:520px">
-    <h2 style="margin:0 0 8px;font-size:24px;letter-spacing:.2px">Jake's Recipe Book</h2>
-    <div class="hint" style="margin:0 0 10px">Sign in to view and edit recipes.</div>
-<div class="hint" style="margin:0 0 14px">First sign-in on a new device requires internet. After that, this device can work offline.</div>
-<div id="accessDeniedMsg" class="hint" style="display:none;margin:14px 0 0;color:rgba(239,68,68,.95);font-weight:900">
-  Access denied. This Google account isn’t on the allow list.
-</div>
-
-    <div id="loginGateBtnHost" style="display:flex;justify-content:center"></div>
-  </div>
-</div>
-
 
 <main class="main">
 <div class="filters">
@@ -975,21 +949,31 @@ function ensureAuthButton(){
   return btn;
 }
 
+function adminModeRequested(){
+  try{
+    const u = new URL(location.href);
+    return u.searchParams.get("admin") === "1";
+  }catch{
+    return false;
+  }
+}
+
 
 function renderAuthButton(){
   const btn = ensureAuthButton();
-  const host = document.getElementById("loginGateBtnHost");
 
   if(_currentUser){
     btn.style.display = "none";
     return;
   }
 
-  btn.textContent = "Sign in with Google";
-  btn.style.display = "";
+  if(!adminModeRequested()){
+    btn.style.display = "none";
+    return;
+  }
 
-  // Move button into the centered gate UI when signed out
-  if(host) host.appendChild(btn);
+  btn.textContent = "Owner sign-in";
+  btn.style.display = "";
 
   btn.onclick = async ()=>{
   // First-time sign-in requires internet
@@ -1134,24 +1118,6 @@ window.AUTH = {
 
 
 
-  // ---- ACCESS CONTROL (UI gate; Firebase rules are the real security) ----
-const OWNER_EMAIL = "jakeleuck101@gmail.com";
-const ALLOWED_EMAILS = new Set([
-  "jakeleuck101@gmail.com",
-  "sethleuck5@gmail.com"
-].map(e => e.toLowerCase()));
-
-function userEmail(user){
-  return String(user?.email || user?.providerData?.[0]?.email || "").toLowerCase();
-}
-function isAllowedUser(user){
-  const e = userEmail(user);
-  return !!e && ALLOWED_EMAILS.has(e);
-}
-function isOwnerUser(user){
-  return userEmail(user) === OWNER_EMAIL.toLowerCase();
-}
-
 function setDenied(on){
   document.body.classList.toggle("denied", !!on);
   const m = document.getElementById("accessDeniedMsg");
@@ -1163,6 +1129,43 @@ function setDenied(on){
 
   function setGate(on){
   document.body.classList.toggle("gated", !!on);
+}
+
+function currentUserIsOwner(){
+  const user = window._getCurrentUser ? window._getCurrentUser() : null;
+  return !!(window.AUTH?.isOwnerUser?.(user));
+}
+
+function requireOwnerAction(message = "Only the owner account can change recipes."){
+  if(currentUserIsOwner()) return true;
+  alert(message);
+  return false;
+}
+
+function setOwnerUI(owner, signedIn){
+  const show = (id, on) => {
+    const el = $(id);
+    if(el) el.style.display = on ? "" : "none";
+  };
+
+  show("advancedMenu", !!signedIn);
+  show("signOutBtn", !!signedIn);
+  show("restoreBtn", !!owner);
+  show("pushCloudBtn", !!owner);
+  show("importMenu", !!owner);
+  show("newBtn", !!owner);
+  show("editToggleBtn", !!owner);
+  show("deleteBtn", !!owner);
+  show("saveEditBtn", !!owner);
+  show("markCookedBtn", !!owner);
+  show("addImageBtn", !!owner);
+  if(!owner) show("removeImageBtn", false);
+
+  if(!owner && state.editOpen){
+    state.editOpen = false;
+    $("editPanel").classList.remove("show");
+    $("editToggleBtn").textContent = "Edit";
+  }
 }
 
 window._doSignOut = async ()=> {
@@ -1494,7 +1497,7 @@ function _clearIncomingShareFromURL(){
 async function processPendingShare(){
   const user = window._getCurrentUser?.();
   const raw = localStorage.getItem(PENDING_SHARE_KEY);
-  if(!user || !raw) return false;
+  if(!user || !raw || !currentUserIsOwner()) return false;
 
   let share = null;
   try { share = JSON.parse(raw); } catch {}
@@ -2602,6 +2605,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
   }
 
   function toggleEdit(){
+    if(!requireOwnerAction()) return;
     const r = getSelected();
     if(!r) return;
 
@@ -2616,6 +2620,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
   }
 
   async function saveEdit(){
+    if(!requireOwnerAction()) return;
     const r = getSelected();
     if(!r) return;
     const idx = state.recipes.findIndex(x=>x.id===r.id);
@@ -2667,6 +2672,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
 
   // Cooked +1 with cooldown + Undo snackbar
   async function markCooked(){
+    if(!requireOwnerAction()) return;
     const r = getSelected();
     if(!r) return;
     const idx = state.recipes.findIndex(x=>x.id===r.id);
@@ -2721,6 +2727,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
   }
 
   async function deleteRecipe(){
+    if(!requireOwnerAction()) return;
     const r = getSelected();
     if(!r) return;
     if(!confirm(`Delete "${r.title}"?`)) return;
@@ -2740,6 +2747,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
   }
 
   async function newRecipe(){
+    if(!requireOwnerAction()) return;
     const t = Date.now();
     const r = {
       id: uid(),
@@ -2786,6 +2794,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
 
     // Create a new recipe draft from an incoming iOS share, and open editor
     async function newRecipeFromShare(shareTitle, shareUrl){
+    if(!requireOwnerAction()) return;
     const t = Date.now();
 
     const title = (shareTitle || "").trim() || "New Recipe";
@@ -3426,34 +3435,13 @@ function importRecipeFromPastedText(raw){
   }
 
   window.__onAuthChange = async (user)=>{
-    const allowed = !!(user && isAllowedUser(user));
-    setGate(!allowed);
-    setDenied(!!(user && !allowed));
-
-    if(user && !allowed){
-      try { await window._doSignOut(); } catch(e){}
-      return;
-    }
-
-    // Signed out: keep data in memory/localStorage, but don't show it
-    if(!user) return;
-
-    // Allowed user
+    const owner = !!(user && currentUserIsOwner());
+    setGate(false);
     setDenied(false);
+    setOwnerUI(owner, !!user);
 
-
-  // If we were opened via ?shareUrl=..., save it now that we're signed in
-  await processPendingShare();
-
-  // Signed in: run cloud sync immediately + render
-  try{
-
-    const cloud = await window.FB.loadAll();
-
-    if(Array.isArray(cloud) && cloud.length){
-      state.recipes = cloud;
-      normalizeAllRecipesInPlace();
-      saveLocal({ skipCloud:true });
+    if(owner){
+      await processPendingShare();
     }
 
     refreshFilterOptions();
@@ -3462,10 +3450,6 @@ function importRecipeFromPastedText(raw){
     setCloudStatus();
     renderGrid();
     if(state.selectedId) renderViewer();
-  }catch(e){
-    console.warn("Auth-change cloud sync failed", e);
-    toast("cloud offline");
-  }
 };
 
 
@@ -3502,115 +3486,76 @@ await waitForFB();
 if (window.FB && window.FB.enabled) {
   await (window._authInit || Promise.resolve(null));
   const user = window._getCurrentUser ? window._getCurrentUser() : null;
+  const owner = !!(user && currentUserIsOwner());
+  setGate(false);
+  setDenied(false);
+  setOwnerUI(owner, !!user);
 
-  const allowed = !!(user && isAllowedUser(user));
-  setGate(!allowed);
-  setDenied(!!(user && !allowed));
+  try {
+    // 1) Instant render from local cache (works offline after first load on this device)
+    const local = loadLocal();
+    if (Array.isArray(local) && local.length > 0) {
+      state.recipes = local;
+      normalizeAllRecipesInPlace();
+      refreshFilterOptions();
+      rebuildTagCaches();
+      refreshEditSuggestions();
+      setCloudStatus();
+      renderGrid();
+      if (state.selectedId) renderViewer();
+    }
 
-  if(user && !allowed){
-    try { await window._doSignOut(); } catch(e){}
-  }
+    // 2) Cloud fetch (source of truth when it has data)
+    const cloud = await window.FB.loadAll();
 
+    if (Array.isArray(cloud) && cloud.length > 0) {
+      state.recipes = cloud;
+      normalizeAllRecipesInPlace();
+      saveLocal({ skipCloud: true });
+      refreshFilterOptions();
+      rebuildTagCaches();
+      refreshEditSuggestions();
+      toast("synced from cloud");
+    } else {
+      console.warn("Cloud returned 0 recipes; keeping local cache.");
+      toast("cloud empty (kept local)");
+    }
 
+    // 3) Live updates (ignore empty snapshots to avoid wiping local)
+    if (window.FB.unsubscribe) window.FB.unsubscribe();
+    window.FB.unsubscribe = window.FB.subscribe((list) => {
+      if (state.editOpen) return;
 
-// IMPORTANT: do NOT return here.
-// We still need to finish init() so all event listeners/buttons are wired up.
-// When the user signs in, __onAuthChange will load + render recipes.
-if(!allowed){
-
-  setCloudStatus();
-  renderGrid(); // (won't be visible because gated, but keeps state sane)
-} else {
-  // Signed in now: proceed with cloud session below
-}
-
-
-
-  // Cloud-only session behavior:
-  // - Signed out: keep local cache (for this device), but do not attempt cloud.
-  // - Signed in: render immediately from local cache (offline-friendly), then pull cloud and subscribe.
-  if(!allowed){
-
-    console.warn("Not signed in; skipping cloud sync.");
-    toast("sign in to sync");
-    setCloudStatus?.();
-
-    // Keep whatever is already in state/local cache; do not wipe.
-    refreshFilterOptions();
-    rebuildTagCaches();
-    refreshEditSuggestions();
-    renderGrid();
-    if (state.selectedId) renderViewer();
-
-  } else {
-    try {
-      // 1) Instant render from local cache (works offline after first signed-in use on this device)
-      const local = loadLocal();
-      if (Array.isArray(local) && local.length > 0) {
-        state.recipes = local;
+      if (Array.isArray(list) && list.length > 0) {
+        state.recipes = list;
         normalizeAllRecipesInPlace();
+        saveLocal({ skipCloud: true });
         refreshFilterOptions();
         rebuildTagCaches();
         refreshEditSuggestions();
         setCloudStatus();
         renderGrid();
         if (state.selectedId) renderViewer();
-      }
-
-      // 2) Cloud fetch (source of truth when it has data)
-      const cloud = await window.FB.loadAll();
-
-      if (Array.isArray(cloud) && cloud.length > 0) {
-        state.recipes = cloud;
-        normalizeAllRecipesInPlace();
-        saveLocal({ skipCloud: true });
-        refreshFilterOptions();
-        rebuildTagCaches();
-        refreshEditSuggestions();
-        toast("synced from cloud");
       } else {
-        // Cloud empty: do NOT wipe local
-        console.warn("Cloud returned 0 recipes; keeping local cache.");
-        toast("cloud empty (kept local)");
+        console.warn("Cloud snapshot empty; ignoring to avoid wiping local.");
+        setCloudStatus();
       }
+    });
 
-      // 3) Live updates (ignore empty snapshots to avoid wiping local)
-      if (window.FB.unsubscribe) window.FB.unsubscribe();
-      window.FB.unsubscribe = window.FB.subscribe((list) => {
-        if (state.editOpen) return;
+    setCloudStatus();
+    renderGrid();
+    if (state.selectedId) renderViewer();
 
-        if (Array.isArray(list) && list.length > 0) {
-          state.recipes = list;
-          normalizeAllRecipesInPlace();
-          saveLocal({ skipCloud: true });
-          refreshFilterOptions();
-          rebuildTagCaches();
-          refreshEditSuggestions();
-          setCloudStatus();
-          renderGrid();
-          if (state.selectedId) renderViewer();
-        } else {
-          console.warn("Cloud snapshot empty; ignoring to avoid wiping local.");
-          setCloudStatus();
-        }
-      });
+  } catch (e) {
+    console.warn("Firebase load/subscribe failed; using local cache.", e);
+    toast("cloud offline");
+    setCloudStatus?.();
 
-      setCloudStatus();
-      renderGrid();
-      if (state.selectedId) renderViewer();
-
-    } catch (e) {
-      console.warn("Firebase load/subscribe failed; using local cache.", e);
-      toast("cloud offline");
-      setCloudStatus?.();
-
-      // Keep whatever is already in state/local cache; do not wipe.
-      refreshFilterOptions();
-      rebuildTagCaches();
-      refreshEditSuggestions();
-      renderGrid();
-      if (state.selectedId) renderViewer();
-    }
+    refreshFilterOptions();
+    rebuildTagCaches();
+    refreshEditSuggestions();
+    renderGrid();
+    if (state.selectedId) renderViewer();
   }
 }
 
@@ -3654,11 +3599,13 @@ $("clearFiltersBtn").onclick = clearAllFilters;
 
     // Import menu actions
     $("pasteRecipeActionBtn").onclick = ()=>{
+      if(!requireOwnerAction()) return;
       openPasteModal();
       closeImportMenu();
     };
 
     $("importHtmlActionBtn").onclick = ()=>{
+      if(!requireOwnerAction()) return;
       const f = $("importHtmlFile");
       if(f){
         f.value = "";
@@ -3676,6 +3623,7 @@ $("pasteModal")?.addEventListener("pointerdown", (e)=>{
 });
 
 $("pasteImportBtn")?.addEventListener("click", ()=>{
+  if(!requireOwnerAction()) return;
   const raw = $("pasteRecipeText")?.value || "";
   if(!raw.trim()){
     alert("Paste a recipe first.");
@@ -3735,6 +3683,7 @@ window.addEventListener("keydown", (e)=>{
 
 
 $("restoreBtn").onclick = ()=>{
+  if(!requireOwnerAction()) return;
   $("importFile").value = "";
   $("importFile").click();
   closeAdvancedMenu();
@@ -3742,6 +3691,7 @@ $("restoreBtn").onclick = ()=>{
 
 
 $("importFile").addEventListener("change", async ()=>{
+  if(!requireOwnerAction()) return;
   const f = $("importFile").files?.[0];
   if(!f) return;
   try{
@@ -3845,6 +3795,7 @@ async function importRecipeFromHTMLFile(file){
 const importHtmlFile = $("importHtmlFile");
 if(importHtmlFile){
   importHtmlFile.addEventListener("change", async ()=>{
+    if(!requireOwnerAction()) return;
     const f = importHtmlFile.files?.[0];
     if(!f) return;
     try{
@@ -3873,6 +3824,7 @@ $("signOutBtn").onclick = async ()=>{
 };
 
 $("pushCloudBtn").onclick = async ()=>{
+  if(!requireOwnerAction()) return;
   const user = window._getCurrentUser ? window._getCurrentUser() : null;
   if(!user){ alert("Sign in first."); return; }
 
@@ -3917,6 +3869,7 @@ Normal edits auto-sync.`;
       addBtn.onclick = ()=> fileIn.click();
 
       fileIn.onchange = async ()=>{
+        if(!requireOwnerAction()) return;
         const file = fileIn.files && fileIn.files[0];
         if(!file) return;
 
@@ -3985,6 +3938,7 @@ const out = await window.FB.uploadRecipeImage({
 
     if(rmBtn){
       rmBtn.onclick = async ()=>{
+        if(!requireOwnerAction()) return;
         const r = getSelected();
         if(!r) return;
 
