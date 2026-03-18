@@ -222,6 +222,7 @@
     @media(max-width:520px){.tileTitle{font-size:16px}}
 
     .tile{
+      display:block;
       border:1px solid var(--line);
       background:rgba(18,20,27,.65);
       border-radius:18px;
@@ -229,6 +230,8 @@
       cursor:pointer;
       box-shadow:0 8px 24px rgba(0,0,0,.18);
       transition: transform .10s ease, border-color .10s ease;
+      color:inherit;
+      text-decoration:none;
     }
     .tile:hover{border-color:rgba(255,255,255,.22); transform: translateY(-1px);}
     .imgBox{position:relative; aspect-ratio: 4 / 3; background:rgba(255,255,255,.03)}
@@ -1198,6 +1201,66 @@ window._doSignOut = async ()=> {
   baseServings: null
 };
 
+  const RECIPE_HASH_RE = /^#\/recipe\/([^/?#]+)/i;
+
+  function getRouteRecipeId(hash = location.hash){
+    const m = String(hash || "").match(RECIPE_HASH_RE);
+    if(!m) return null;
+    try{
+      return decodeURIComponent(m[1]);
+    }catch{
+      return m[1];
+    }
+  }
+
+  function recipeRouteHash(id){
+    return id ? `#/recipe/${encodeURIComponent(String(id))}` : "#/";
+  }
+
+  function updateRecipeRoute(id, { replace = false } = {}){
+    const nextHash = recipeRouteHash(id);
+    if(location.hash === nextHash) return;
+
+    if(replace){
+      const u = new URL(location.href);
+      u.hash = nextHash;
+      history.replaceState({}, "", u.toString());
+      return;
+    }
+
+    location.hash = nextHash;
+  }
+
+  function syncViewerToRoute(){
+    const routeId = getRouteRecipeId();
+
+    if(!routeId){
+      if(state.selectedId) closeViewer({ updateRoute:false });
+      return;
+    }
+
+    const match = state.recipes.find(r => r.id === routeId);
+    if(match){
+      const viewerOpen = $("viewer").classList.contains("show");
+      if(state.selectedId === routeId && viewerOpen){
+        renderViewer();
+        return;
+      }
+      openViewer(routeId, { updateRoute:false });
+      return;
+    }
+
+    // Missing/deleted recipe:
+    // keep the hash as-is, but do not leave a stale viewer open.
+    if(state.selectedId && state.selectedId !== routeId){
+      closeViewer({ updateRoute:false });
+      return;
+    }
+    if(state.selectedId === routeId && !getSelected()){
+      closeViewer({ updateRoute:false });
+    }
+  }
+
 
 // Comma-split helper (keeps original casing)
 const normalizeList = (s)=> (s||"").split(",").map(x=>x.trim()).filter(Boolean);
@@ -1914,9 +1977,16 @@ return out;
     }
 
     for(const r of arr){
-      const tile = document.createElement("div");
+      const tile = document.createElement("a");
       tile.className = "tile";
-      tile.onclick = ()=> openViewer(r.id);
+      tile.href = recipeRouteHash(r.id);
+      tile.addEventListener("click", (e)=>{
+        if(e.defaultPrevented) return;
+        if(e.button !== 0) return;
+        if(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        openViewer(r.id);
+      });
 
       const imgBox = document.createElement("div");
       imgBox.className = "imgBox";
@@ -2008,7 +2078,9 @@ return out;
     return state.recipes.find(r => r.id === state.selectedId) || null;
   }
 
-  function openViewer(id){
+  function openViewer(id, { updateRoute = true, replaceRoute = false } = {}){
+    if(!state.recipes.some(r => r.id === id)) return;
+
     state.selectedId = id;
     state.editOpen = false;
 
@@ -2024,12 +2096,16 @@ return out;
 
     showViewer(true);
 
+    if(updateRoute){
+      updateRecipeRoute(id, { replace: replaceRoute });
+    }
+
     // If Cook Mode is on, update hint + try wake lock now (user gesture is the click)
     if(cookModeEnabled()) updateCookModeUI();
   }
 
 
-  function closeViewer(){
+  function closeViewer({ updateRoute = true, replaceRoute = false } = {}){
     showViewer(false);
     state.selectedId = null;
     state.editOpen = false;
@@ -2037,6 +2113,10 @@ return out;
     releaseWakeLock();
     const hint = $("wakeHint");
     if(hint){ hint.style.display = "none"; hint.textContent = ""; }
+
+    if(updateRoute){
+      updateRecipeRoute(null, { replace: replaceRoute });
+    }
   }
 
 
@@ -3449,7 +3529,7 @@ function importRecipeFromPastedText(raw){
     refreshEditSuggestions();
     setCloudStatus();
     renderGrid();
-    if(state.selectedId) renderViewer();
+    syncViewerToRoute();
 };
 
 
@@ -3476,6 +3556,7 @@ if(local){
 refreshFilterOptions();
 rebuildTagCaches();
 refreshEditSuggestions();
+syncViewerToRoute();
 
 
 
@@ -3502,7 +3583,7 @@ if (window.FB && window.FB.enabled) {
       refreshEditSuggestions();
       setCloudStatus();
       renderGrid();
-      if (state.selectedId) renderViewer();
+      syncViewerToRoute();
     }
 
     // 2) Cloud fetch (source of truth when it has data)
@@ -3535,7 +3616,7 @@ if (window.FB && window.FB.enabled) {
         refreshEditSuggestions();
         setCloudStatus();
         renderGrid();
-        if (state.selectedId) renderViewer();
+        syncViewerToRoute();
       } else {
         console.warn("Cloud snapshot empty; ignoring to avoid wiping local.");
         setCloudStatus();
@@ -3544,7 +3625,7 @@ if (window.FB && window.FB.enabled) {
 
     setCloudStatus();
     renderGrid();
-    if (state.selectedId) renderViewer();
+    syncViewerToRoute();
 
   } catch (e) {
     console.warn("Firebase load/subscribe failed; using local cache.", e);
@@ -3555,7 +3636,7 @@ if (window.FB && window.FB.enabled) {
     rebuildTagCaches();
     refreshEditSuggestions();
     renderGrid();
-    if (state.selectedId) renderViewer();
+    syncViewerToRoute();
   }
 }
 
@@ -3679,6 +3760,8 @@ window.addEventListener("keydown", (e)=>{
   if(advMenuEl?.open) closeAdvancedMenu();
   if(importMenuEl?.open) closeImportMenu();
 });
+
+window.addEventListener("hashchange", syncViewerToRoute);
 
 
 
