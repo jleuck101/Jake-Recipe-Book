@@ -914,66 +914,33 @@ body.denied #accessDeniedMsg{ display:block !important; }
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
   import {
-  getFirestore,
   collection,
   getDocs,
   writeBatch,
   doc,
-  onSnapshot,
-  query,
   setDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-
-
-  import {
-  getAuth,
-  setPersistence,
-  browserLocalPersistence,
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-  signOut
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-
 import {
-  getStorage,
   ref as sRef,
   uploadBytes,
   getDownloadURL,
   deleteObject
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js";
-
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyAFgODyKQFacEO3xfslhTeeU4n2hKcAy2s",
-    authDomain: "jake-recipes.firebaseapp.com",
-    projectId: "jake-recipes",
-    storageBucket: "jake-recipes.firebasestorage.app",
-    messagingSenderId: "337488882837",
-    appId: "1:337488882837:web:78b7ad6a163eaac4b3bf9c",
-    measurementId: "G-1PQX8MWL3J"
-  };
-
-  const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-
-  // --- Auth (Google Sign-In) ---
-const auth = getAuth(app);
-setPersistence(auth, browserLocalPersistence).catch(console.warn);
-
-const provider = new GoogleAuthProvider();
-// optional: always show account picker
-provider.setCustomParameters({ prompt: "select_account" });
+  import { db, storage } from "./src/firebase.js";
+  import {
+    authInit,
+    getCurrentUser,
+    isOwnerUser,
+    signIn,
+    signOutUser,
+    subscribeToAuth
+  } from "./src/auth.js";
+  import { createRecipe, deleteRecipeById, listRecipes, subscribeRecipes, updateRecipe } from "./src/recipes-api.js";
 
 let _currentUser = null;
-let _authInitDone = false;
-let _authInitResolve;
-const _authInit = new Promise((res)=>{ _authInitResolve = res; });
+const _authInit = authInit;
 
 function ensureAuthButton(){
   let btn = document.getElementById("authBtn");
@@ -1023,7 +990,7 @@ function renderAuthButton(){
   }
 
   try{
-    await signInWithPopup(auth, provider);
+    await signIn();
     // No refresh needed; onAuthStateChanged will fire and the app will swap in
   }catch(e){
     console.error("Google sign-in failed:", e);
@@ -1033,16 +1000,10 @@ function renderAuthButton(){
 }
 
 
-onAuthStateChanged(auth, (user)=>{
+subscribeToAuth((user)=>{
   _currentUser = user || null;
   renderAuthButton();
-  if(!_authInitDone){
-    _authInitDone = true;
-    _authInitResolve(_currentUser);
-  }
-
   if (window.__onAuthChange) window.__onAuthChange(_currentUser);
-
 });
 
 // Expose auth state to the non-module script
@@ -1050,7 +1011,8 @@ window._authInit = _authInit;
 window._getCurrentUser = () => _currentUser;
 
 window.AUTH = {
-  signOut: () => signOut(auth)
+  signOut: () => signOutUser(),
+  isOwnerUser
 };
 
 
@@ -1061,8 +1023,7 @@ window.AUTH = {
     enabled: true,
 
     async loadAll(){
-      const snap = await getDocs(collection(db, "recipes"));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return listRecipes();
     },
 
     // Make cloud exactly match local (writes all + deletes removed docs)
@@ -1093,15 +1054,12 @@ window.AUTH = {
 
     // Live updates from cloud
     subscribe(onData){
-      const col = collection(db, "recipes");
-      return onSnapshot(query(col), (snap)=>{
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        onData(list);
-      });
+      return subscribeRecipes(onData);
     },
 
     async addInboxUrl({ url, title = "", source = "ios-shortcut" } = {}){
-      if(!_currentUser) throw new Error("Not signed in");
+      const currentUser = getCurrentUser();
+      if(!currentUser) throw new Error("Not signed in");
       if(!url) throw new Error("Missing url");
 
       const id = (crypto.randomUUID ? crypto.randomUUID()
@@ -1109,7 +1067,7 @@ window.AUTH = {
 
       const col = collection(db, "importInbox");
       await setDoc(doc(col, id), {
-        uid: _currentUser.uid,
+        uid: currentUser.uid,
         url: String(url),
         title: String(title || ""),
         source: String(source || ""),
@@ -1125,14 +1083,15 @@ window.AUTH = {
   // --- Storage helpers (upload/delete recipe images) ---
   window.FB.uploadRecipeImage = async ({ recipeId, file, filenameHint } = {}) => {
 
-    if(!_currentUser) throw new Error("Not signed in");
+    const currentUser = getCurrentUser();
+    if(!currentUser) throw new Error("Not signed in");
     if(!recipeId) throw new Error("Missing recipeId");
     if(!file) throw new Error("Missing file");
 
     // Keep names safe-ish
     const safeName = String(filenameHint || file.name || "image").replace(/[^\w.\-]+/g, "_");
 
-    const path = `recipeImages/${_currentUser.uid}/${recipeId}/${Date.now()}_${safeName}`;
+    const path = `recipeImages/${currentUser.uid}/${recipeId}/${Date.now()}_${safeName}`;
 
     const fileRef = sRef(storage, path);
     await uploadBytes(fileRef, file, { contentType: file.type || "image/jpeg" });
@@ -1142,11 +1101,16 @@ window.AUTH = {
   };
 
   window.FB.deleteRecipeImage = async (path) => {
-    if(!_currentUser) throw new Error("Not signed in");
+    const currentUser = getCurrentUser();
+    if(!currentUser) throw new Error("Not signed in");
     if(!path) return;
     const fileRef = sRef(storage, path);
     await deleteObject(fileRef);
   };
+
+  window.FB.createRecipe = createRecipe;
+  window.FB.updateRecipe = updateRecipe;
+  window.FB.deleteRecipeById = deleteRecipeById;
 
 
 </script>
@@ -1534,7 +1498,7 @@ async function processPendingShare(){
   const OPENED_SHARE_KEY = "rv.pendingShareOpened.v1";
   if(localStorage.getItem(OPENED_SHARE_KEY) !== share.url){
     try{
-      newRecipeFromShare(share.title || "", share.url);
+      await newRecipeFromShare(share.title || "", share.url);
       localStorage.setItem(OPENED_SHARE_KEY, share.url);
     }catch(e){
       console.warn("Draft open failed:", e);
@@ -2642,7 +2606,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     }
   }
 
-  function saveEdit(){
+  async function saveEdit(){
     const r = getSelected();
     if(!r) return;
     const idx = state.recipes.findIndex(x=>x.id===r.id);
@@ -2675,8 +2639,15 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
       updatedAt: t
     };
 
-    state.recipes[idx] = updated;
-    saveLocal();
+    try{
+      const saved = await window.FB.updateRecipe(updated);
+      state.recipes[idx] = saved;
+      saveLocal({ skipCloud:true });
+    }catch(e){
+      console.warn(e);
+      toast("save failed");
+      return;
+    }
     refreshFilterOptions();
     renderGrid();
     renderViewer();
@@ -2686,7 +2657,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
   }
 
   // Cooked +1 with cooldown + Undo snackbar
-  function markCooked(){
+  async function markCooked(){
     const r = getSelected();
     if(!r) return;
     const idx = state.recipes.findIndex(x=>x.id===r.id);
@@ -2698,38 +2669,68 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     setTimeout(()=>btn.disabled=false, 1500);
 
     const t = Date.now();
-    state.recipes[idx].cookedCount = Number(state.recipes[idx].cookedCount||0) + 1;
-    state.recipes[idx].lastCookedAt = t;
-    state.recipes[idx].updatedAt = t;
-    saveLocal();
+    const updated = {
+      ...state.recipes[idx],
+      cookedCount: Number(state.recipes[idx].cookedCount||0) + 1,
+      lastCookedAt: t,
+      updatedAt: t
+    };
+    try{
+      const saved = await window.FB.updateRecipe(updated);
+      state.recipes[idx] = saved;
+      saveLocal({ skipCloud:true });
+    }catch(e){
+      console.warn(e);
+      toast("save failed");
+      btn.disabled = false;
+      return;
+    }
     renderGrid();
     renderViewer();
 
-    showSnack("Cooked +1", () => {
+    showSnack("Cooked +1", async () => {
       const j = state.recipes.findIndex(x=>x.id===r.id);
       if(j<0) return;
-      state.recipes[j].cookedCount = Math.max(0, Number(state.recipes[j].cookedCount||0) - 1);
-      state.recipes[j].updatedAt = Date.now();
-      saveLocal();
+      const reverted = {
+        ...state.recipes[j],
+        cookedCount: Math.max(0, Number(state.recipes[j].cookedCount||0) - 1),
+        updatedAt: Date.now()
+      };
+      try{
+        const saved = await window.FB.updateRecipe(reverted);
+        state.recipes[j] = saved;
+        saveLocal({ skipCloud:true });
+      }catch(e){
+        console.warn(e);
+        toast("undo failed");
+        return;
+      }
       renderGrid();
       renderViewer();
       toast("undid cooked");
     });
   }
 
-  function deleteRecipe(){
+  async function deleteRecipe(){
     const r = getSelected();
     if(!r) return;
     if(!confirm(`Delete "${r.title}"?`)) return;
+    try{
+      await window.FB.deleteRecipeById(r.id);
+    }catch(e){
+      console.warn(e);
+      toast("delete failed");
+      return;
+    }
     state.recipes = state.recipes.filter(x=>x.id!==r.id);
-    saveLocal();
+    saveLocal({ skipCloud:true });
     refreshFilterOptions();
     renderGrid();
     toast("deleted");
     closeViewer();
   }
 
-  function newRecipe(){
+  async function newRecipe(){
     const t = Date.now();
     const r = {
       id: uid(),
@@ -2754,20 +2755,28 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
       directions: "",
       notes: ""
     };
-    state.recipes.unshift(r);
-    saveLocal();
+    let saved;
+    try{
+      saved = await window.FB.createRecipe(r);
+    }catch(e){
+      console.warn(e);
+      toast("create failed");
+      return;
+    }
+    state.recipes.unshift(saved);
+    saveLocal({ skipCloud:true });
     refreshFilterOptions();
     renderGrid();
-    openViewer(r.id);
+    openViewer(saved.id);
     state.editOpen = true;
     $("editPanel").classList.add("show");
     $("editToggleBtn").textContent = "Close edit";
-    fillEditForm(r);
+    fillEditForm(saved);
     toast("new recipe");
   }
 
     // Create a new recipe draft from an incoming iOS share, and open editor
-    function newRecipeFromShare(shareTitle, shareUrl){
+    async function newRecipeFromShare(shareTitle, shareUrl){
     const t = Date.now();
 
     const title = (shareTitle || "").trim() || "New Recipe";
@@ -2797,16 +2806,24 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
       notes: ""
     };
 
-    state.recipes.unshift(r);
-    saveLocal();
+    let saved;
+    try{
+      saved = await window.FB.createRecipe(r);
+    }catch(e){
+      console.warn(e);
+      toast("create failed");
+      return;
+    }
+    state.recipes.unshift(saved);
+    saveLocal({ skipCloud:true });
     refreshFilterOptions();
     renderGrid();
 
-    openViewer(r.id);
+    openViewer(saved.id);
     state.editOpen = true;
     $("editPanel").classList.add("show");
     $("editToggleBtn").textContent = "Close edit";
-    fillEditForm(r);
+    fillEditForm(saved);
 
     toast("opened draft from share");
   }
@@ -3934,10 +3951,14 @@ const out = await window.FB.uploadRecipeImage({
           // Update recipe immediately + sync (so you don’t forget to hit Save)
           const idx = state.recipes.findIndex(x=>x.id===r.id);
           if(idx >= 0){
-            state.recipes[idx].imageUrl = out.url;
-            state.recipes[idx].imagePath = out.path;
-            state.recipes[idx].updatedAt = Date.now();
-            saveLocal();
+            const saved = await window.FB.updateRecipe({
+              ...state.recipes[idx],
+              imageUrl: out.url,
+              imagePath: out.path,
+              updatedAt: Date.now()
+            });
+            state.recipes[idx] = saved;
+            saveLocal({ skipCloud:true });
             renderGrid();
             renderViewer();
             toast("image saved");
@@ -3980,10 +4001,14 @@ const out = await window.FB.uploadRecipeImage({
 
           const idx = state.recipes.findIndex(x=>x.id===r.id);
           if(idx >= 0){
-            state.recipes[idx].imageUrl = "";
-            state.recipes[idx].imagePath = "";
-            state.recipes[idx].updatedAt = Date.now();
-            saveLocal();
+            const saved = await window.FB.updateRecipe({
+              ...state.recipes[idx],
+              imageUrl: "",
+              imagePath: "",
+              updatedAt: Date.now()
+            });
+            state.recipes[idx] = saved;
+            saveLocal({ skipCloud:true });
             renderGrid();
             renderViewer();
             toast("image removed");
