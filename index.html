@@ -558,6 +558,7 @@
           <summary class="btn">Import</summary>
           <div class="advPanel">
             <button class="btn" id="pasteRecipeActionBtn" type="button">Paste recipe</button>
+            <button class="btn" id="importUrlActionBtn" type="button">Import URL</button>
             <button class="btn" id="importHtmlActionBtn" type="button">Import HTML</button>
           </div>
         </details>
@@ -892,6 +893,37 @@
   </div>
 </div>
 
+<!-- Import URL modal -->
+<div id="importUrlModal" class="pasteModal" aria-hidden="true">
+  <div class="pasteCard" role="dialog" aria-modal="true" aria-label="Import recipe from URL">
+    <div class="pasteCardHd">
+      <div>
+        <div class="h2">Import from URL</div>
+        <div class="hint">Paste a recipe webpage URL. This keeps a preview-first flow and will call a backend endpoint when connected.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn small" id="importUrlCancelBtn" type="button">Cancel</button>
+        <button class="btn small primary" id="importUrlPreviewBtn" type="button">Preview</button>
+        <button class="btn small ok" id="importUrlUsePreviewBtn" type="button" disabled>Use This Preview</button>
+      </div>
+    </div>
+    <div class="pasteCardBd">
+      <div class="k">Recipe URL</div>
+      <input id="importUrlInput" type="url" placeholder="https://example.com/recipe" />
+      <div class="hint" id="importUrlHint" style="margin-top:8px;">
+        Paste a recipe URL to request a preview. This stays read-only until a backend is connected.
+      </div>
+      <div style="margin-top:12px;">
+        <div class="k">Recipe preview</div>
+        <textarea id="importUrlPreviewText" readonly placeholder="Backend recipe import not connected yet."></textarea>
+        <div class="hint" id="importUrlPreviewMeta" style="margin-top:8px;">
+          Backend recipe import not connected yet.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Snackbar -->
 <div id="snack" class="snack" aria-live="polite">
@@ -1196,6 +1228,7 @@ window._doSignOut = async ()=> {
   const state = {
   recipes: [],
   selectedId: null,
+  draftRecipe: null,
   editOpen: false,
   scaleFactor: 1,
   baseServings: null
@@ -2075,11 +2108,14 @@ return out;
   }
 
   function getSelected(){
+    if(state.draftRecipe && state.draftRecipe.id === state.selectedId){
+      return state.draftRecipe;
+    }
     return state.recipes.find(r => r.id === state.selectedId) || null;
   }
 
   function openViewer(id, { updateRoute = true, replaceRoute = false } = {}){
-    if(!state.recipes.some(r => r.id === id)) return;
+    if(!(state.draftRecipe && state.draftRecipe.id === id) && !state.recipes.some(r => r.id === id)) return;
 
     state.selectedId = id;
     state.editOpen = false;
@@ -2107,6 +2143,7 @@ return out;
 
   function closeViewer({ updateRoute = true, replaceRoute = false } = {}){
     showViewer(false);
+    state.draftRecipe = null;
     state.selectedId = null;
     state.editOpen = false;
     hideSnack();
@@ -2704,13 +2741,14 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     const r = getSelected();
     if(!r) return;
     const idx = state.recipes.findIndex(x=>x.id===r.id);
-    if(idx<0) return;
+    const isDraft = !!(state.draftRecipe && state.draftRecipe.id === r.id);
+    if(idx<0 && !isDraft) return;
 
     const t = Date.now();
     const cookedCount = Math.max(0, Number($("eCookedCount").value || 0));
 
     const updated = {
-      ...state.recipes[idx],
+      ...(isDraft ? state.draftRecipe : state.recipes[idx]),
       title: ($("eTitle").value.trim() || "(untitled)"),
       cuisine: canonicalList($("eCuisine").value),
       dishType: canonicalList($("eDishType").value),
@@ -2734,8 +2772,16 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     };
 
     try{
-      const saved = await window.FB.updateRecipe(updated);
-      state.recipes[idx] = saved;
+      const saved = isDraft
+        ? await window.FB.createRecipe(updated)
+        : await window.FB.updateRecipe(updated);
+      if(isDraft){
+        state.draftRecipe = null;
+        state.recipes.unshift(saved);
+        state.selectedId = saved.id;
+      }else{
+        state.recipes[idx] = saved;
+      }
       saveLocal({ skipCloud:true });
     }catch(e){
       console.warn(e);
@@ -3491,6 +3537,252 @@ function importRecipeFromPastedText(raw){
   return r;
 }
 
+let importUrlPreviewData = null;
+
+function parseImportedTimeMinutes(value){
+  const text = String(value || "").trim().toLowerCase();
+  if(!text) return null;
+
+  const hrMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/);
+  const minMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:m|min|mins|minute|minutes)\b/);
+
+  if(!hrMatch && !minMatch){
+    if(/^\d+$/.test(text)) return Number(text);
+    return null;
+  }
+
+  const hours = hrMatch ? Number(hrMatch[1]) : 0;
+  const minutes = minMatch ? Number(minMatch[1]) : 0;
+  const total = Math.round(hours * 60 + minutes);
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+function formatImportedDirections(input){
+  const steps = Array.isArray(input) ? input : [input];
+  const out = [];
+
+  for(const raw of steps){
+    const text = String(raw || "").trim();
+    if(!text) continue;
+
+    let parts = [text];
+
+    if(/\n/.test(text)){
+      const split = text.split(/\n+/).map(part => part.trim()).filter(Boolean);
+      if(split.length > 1) parts = split;
+    }else if(/(?:^|\s)(?:\d+[\.\)]\s+)/.test(text)){
+      const split = text
+        .split(/(?=(?:^|\s)\d+[\.\)]\s+)/)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => part.replace(/^\d+[\.\)]\s+/, "").trim());
+      if(split.length > 1) parts = split;
+    }else if(/(?:^|\s)step\s+\d+[:.\-]?\s+/i.test(text)){
+      const split = text
+        .split(/(?=(?:^|\s)step\s+\d+[:.\-]?\s+)/i)
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => part.replace(/^step\s+\d+[:.\-]?\s+/i, "").trim());
+      if(split.length > 1) parts = split;
+    }
+
+    out.push(...parts.filter(Boolean));
+  }
+
+  return out.map((step, index) => `${index + 1}. ${step}`).join("\n\n");
+}
+
+function formatImportedIngredients(lines){
+  if(!Array.isArray(lines)) return "";
+
+  const clean = lines
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const looksLikeIngredientLine = (text) => {
+    return /^(\d+|[\u00bc-\u00be\u2150-\u215e]|one|two|three|four|five|six|seven|eight|nine|ten|a|an)\b/i.test(text)
+      || /\b(cup|cups|tbsp|tsp|teaspoon|teaspoons|tablespoon|tablespoons|oz|ounce|ounces|lb|lbs|pound|pounds|g|kg|ml|l|pinch|dash|clove|cloves|can|cans|package|packages)\b/i.test(text)
+      || /^[\-*]\s+/.test(text);
+  };
+
+  const isLikelyHeader = (text, index) => {
+    if(!text) return false;
+    if(text.endsWith(":")) return true;
+    if(text.length > 32) return false;
+    if(/[.,;]$/.test(text)) return false;
+    if(/^(\d+|[\u00bc-\u00be\u2150-\u215e]|[\-*])/.test(text)) return false;
+
+    const prev = clean[index - 1] || "";
+    const next = clean[index + 1] || "";
+    if(!prev || !next) return false;
+
+    return looksLikeIngredientLine(prev) && looksLikeIngredientLine(next);
+  };
+
+  const out = [];
+  for(let i = 0; i < clean.length; i += 1){
+    const text = clean[i];
+
+    if(isLikelyHeader(text, i)){
+      if(out.length) out.push("");
+      out.push(text);
+      continue;
+    }
+
+    out.push(text);
+  }
+
+  return out.join("\n");
+}
+
+function openDraftInEditor(recipe){
+  if(!recipe?.id) return null;
+
+  state.draftRecipe = { ...recipe };
+  state.selectedId = recipe.id;
+  state.editOpen = true;
+  state.scaleFactor = 1;
+  state.baseServings = null;
+  $("scaleServingsTarget").value = "";
+  $("editPanel").classList.add("show");
+  $("editToggleBtn").textContent = "Close edit";
+  renderViewer();
+  showViewer(true);
+  fillEditForm(state.draftRecipe);
+  return state.draftRecipe;
+}
+
+function importRecipeFromUrlPreview(preview){
+  if(!preview) return null;
+
+  const recipe = preview.recipe || preview;
+  if(!recipe || (!recipe.title && !recipe.ingredients?.length && !recipe.directions?.length)) return null;
+
+  const t = Date.now();
+  const draft = {
+    id: uid(),
+    title: recipe.title || "Imported Recipe",
+    cuisine: "",
+    dishType: "",
+    base: "",
+    mainIngredient: "",
+    equipment: [],
+    timeMinutes: parseImportedTimeMinutes(recipe.total_time),
+    dishesCount: null,
+    tags: [],
+    cookedCount: 0,
+    lastCookedAt: null,
+    createdAt: t,
+    updatedAt: t,
+    imageUrl: recipe.image || "",
+    imagePath: "",
+    sourceUrl: recipe.source_url || "",
+    servings: recipe.servings || "",
+    ingredients: formatImportedIngredients(recipe.ingredients),
+    directions: formatImportedDirections(recipe.directions),
+    notes: [
+      recipe.prep_time ? `Prep: ${recipe.prep_time}` : "",
+      recipe.cook_time ? `Cook: ${recipe.cook_time}` : "",
+      recipe.total_time ? `Total: ${recipe.total_time}` : ""
+    ].filter(Boolean).join("\n")
+  };
+
+  openDraftInEditor(draft);
+  toast("URL preview loaded into draft");
+  return draft;
+}
+
+function getRecipeImportEndpoint(){
+  const fromWindow = String(window.RECIPE_IMPORT_URL_ENDPOINT || "").trim();
+  if(fromWindow) return fromWindow;
+
+  const fromMeta = document.querySelector('meta[name="recipe-import-endpoint"]')?.getAttribute("content") || "";
+  return String(fromMeta).trim();
+}
+
+async function requestRecipeImportPreview(url){
+  const endpoint = getRecipeImportEndpoint();
+  if(!endpoint){
+    throw new Error("Backend recipe import not connected yet.");
+  }
+
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+
+  let data = null;
+  try{
+    data = await res.json();
+  }catch{
+    data = null;
+  }
+
+  if(!res.ok){
+    throw new Error(data?.error || "Recipe import failed.");
+  }
+
+  return data;
+}
+
+function resetImportUrlPreview(){
+  importUrlPreviewData = null;
+  $("importUrlHint").textContent = "Paste a recipe URL to request a preview. This stays read-only until a backend is connected.";
+  $("importUrlPreviewText").value = "";
+  $("importUrlPreviewMeta").textContent = "Backend recipe import not connected yet.";
+  $("importUrlUsePreviewBtn").disabled = true;
+}
+
+function openImportUrlModal(){
+  $("importUrlInput").value = "";
+  resetImportUrlPreview();
+  $("importUrlModal").classList.add("show");
+  $("importUrlModal").setAttribute("aria-hidden", "false");
+}
+
+function closeImportUrlModal(){
+  $("importUrlModal").classList.remove("show");
+  $("importUrlModal").setAttribute("aria-hidden", "true");
+}
+
+function renderImportUrlPreview(data){
+  const recipe = data?.recipe || null;
+  if(!recipe){
+    importUrlPreviewData = null;
+    $("importUrlHint").textContent = "Preview unavailable.";
+    $("importUrlPreviewText").value = "No recipe preview returned.";
+    $("importUrlPreviewMeta").textContent = "Backend did not return recipe preview data.";
+    $("importUrlUsePreviewBtn").disabled = true;
+    return;
+  }
+
+  const lines = [];
+  lines.push(recipe.title || "(untitled)");
+  if(recipe.source_url) lines.push(`Source: ${recipe.source_url}`);
+  if(recipe.servings) lines.push(`Servings: ${recipe.servings}`);
+  if(recipe.prep_time) lines.push(`Prep: ${recipe.prep_time}`);
+  if(recipe.cook_time) lines.push(`Cook: ${recipe.cook_time}`);
+  if(recipe.total_time) lines.push(`Total: ${recipe.total_time}`);
+  if(recipe.image) lines.push(`Image: ${recipe.image}`);
+  if(Array.isArray(recipe.ingredients) && recipe.ingredients.length){
+    lines.push("");
+    lines.push("Ingredients:");
+    lines.push(recipe.ingredients.map(item => `- ${item}`).join("\n"));
+  }
+  if(Array.isArray(recipe.directions) && recipe.directions.length){
+    lines.push("");
+    lines.push("Directions:");
+    lines.push(recipe.directions.map((item, index) => `${index + 1}. ${item}`).join("\n"));
+  }
+
+  importUrlPreviewData = data;
+  $("importUrlHint").textContent = "Preview loaded from backend.";
+  $("importUrlPreviewText").value = lines.join("\n").trim();
+  $("importUrlPreviewMeta").textContent = "Read-only preview from backend recipe import.";
+  $("importUrlUsePreviewBtn").disabled = false;
+}
+
 
   /* Data import/export */
   function downloadJSON(){
@@ -3685,6 +3977,12 @@ $("clearFiltersBtn").onclick = clearAllFilters;
       closeImportMenu();
     };
 
+    $("importUrlActionBtn").onclick = ()=>{
+      if(!requireOwnerAction()) return;
+      openImportUrlModal();
+      closeImportMenu();
+    };
+
     $("importHtmlActionBtn").onclick = ()=>{
       if(!requireOwnerAction()) return;
       const f = $("importHtmlFile");
@@ -3697,10 +3995,15 @@ $("clearFiltersBtn").onclick = clearAllFilters;
 
 
 $("pasteCancelBtn")?.addEventListener("click", closePasteModal);
+$("importUrlCancelBtn")?.addEventListener("click", closeImportUrlModal);
 
 $("pasteModal")?.addEventListener("pointerdown", (e)=>{
   // clicking the dark background closes; clicking the card does not
   if(e.target && e.target.id === "pasteModal") closePasteModal();
+});
+
+$("importUrlModal")?.addEventListener("pointerdown", (e)=>{
+  if(e.target && e.target.id === "importUrlModal") closeImportUrlModal();
 });
 
 $("pasteImportBtn")?.addEventListener("click", ()=>{
@@ -3726,6 +4029,62 @@ $("pasteRecipeText")?.addEventListener("keydown", (e)=>{
   if(mod && e.key === "Enter"){
     e.preventDefault();
     $("pasteImportBtn")?.click();
+  }
+});
+
+$("importUrlPreviewBtn")?.addEventListener("click", async ()=>{
+  if(!requireOwnerAction()) return;
+
+  const url = $("importUrlInput")?.value?.trim() || "";
+  if(!url){
+    alert("Paste a recipe URL first.");
+    return;
+  }
+
+  $("importUrlHint").textContent = "Requesting recipe preview…";
+  $("importUrlPreviewText").value = "";
+  $("importUrlPreviewMeta").textContent = "Waiting for backend response…";
+
+  try{
+    const data = await requestRecipeImportPreview(url);
+    renderImportUrlPreview(data);
+  }catch(e){
+    importUrlPreviewData = null;
+    console.warn(e);
+    $("importUrlHint").textContent = e?.message || "Backend recipe import not connected yet.";
+    $("importUrlPreviewText").value = [
+      "Backend recipe import not connected yet.",
+      "",
+      `URL: ${url}`,
+      "",
+      "Configure `window.RECIPE_IMPORT_URL_ENDPOINT` or add",
+      '<meta name="recipe-import-endpoint" content="https://your-backend.example/api/import-recipe-url">'
+    ].join("\n");
+    $("importUrlPreviewMeta").textContent = "Preview is read-only. Save/import stays disabled until the backend is connected.";
+    $("importUrlUsePreviewBtn").disabled = true;
+  }
+});
+
+$("importUrlUsePreviewBtn")?.addEventListener("click", ()=>{
+  if(!requireOwnerAction()) return;
+  if(!importUrlPreviewData){
+    alert("Load a recipe preview first.");
+    return;
+  }
+
+  const draft = importRecipeFromUrlPreview(importUrlPreviewData);
+  if(!draft){
+    alert("The current preview could not be converted into a draft recipe.");
+    return;
+  }
+
+  closeImportUrlModal();
+});
+
+$("importUrlInput")?.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter"){
+    e.preventDefault();
+    $("importUrlPreviewBtn")?.click();
   }
 });
 
@@ -3759,6 +4118,7 @@ window.addEventListener("keydown", (e)=>{
   if(e.key !== "Escape") return;
   if(advMenuEl?.open) closeAdvancedMenu();
   if(importMenuEl?.open) closeImportMenu();
+  closeImportUrlModal();
 });
 
 window.addEventListener("hashchange", syncViewerToRoute);
