@@ -12,6 +12,23 @@ from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
+http = requests.Session()
+http.headers.update(
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,"
+            "image/avif,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+        "DNT": "1",
+        "Upgrade-Insecure-Requests": "1",
+    }
+)
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _ISO_DURATION_RE = re.compile(
@@ -177,14 +194,11 @@ def _instruction_list(value: Any) -> list[str]:
 def import_recipe_from_url(url: str) -> dict[str, Any] | None:
     target_url = _validate_url(url)
 
-    response = requests.get(
+    response = http.get(
         target_url,
-        timeout=15,
+        timeout=25,
         headers={
-            "User-Agent": (
-                "Mozilla/5.0 (compatible; JakeRecipeBookImport/1.0; "
-                "+https://example.local/import)"
-            )
+            "Referer": target_url,
         },
     )
     response.raise_for_status()
