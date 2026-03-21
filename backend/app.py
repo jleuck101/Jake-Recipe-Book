@@ -196,6 +196,41 @@ def _instruction_list(value: Any) -> list[str]:
     return []
 
 
+def _looks_like_block_page(response: requests.Response) -> bool:
+    text = (response.text or "")[:4000].lower()
+    markers = (
+        "captcha",
+        "verify you are human",
+        "access denied",
+        "attention required",
+        "request blocked",
+        "cf-chl",
+        "/cdn-cgi/challenge",
+        "bot detection",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _log_fetch_failure(stage: str, target_url: str, exc: requests.RequestException) -> None:
+    response = getattr(exc, "response", None)
+    if response is not None:
+        logger.warning(
+            "Recipe import %s failed for %s: status=%s final_url=%s block_page=%s",
+            stage,
+            target_url,
+            response.status_code,
+            response.url,
+            _looks_like_block_page(response),
+        )
+        return
+
+    if isinstance(exc, requests.Timeout):
+        logger.warning("Recipe import %s timed out for %s", stage, target_url)
+        return
+
+    logger.warning("Recipe import %s failed for %s: %s", stage, target_url, exc)
+
+
 def import_recipe_from_url(url: str) -> dict[str, Any] | None:
     target_url = _validate_url(url)
     parsed = urlparse(target_url)
@@ -211,7 +246,7 @@ def import_recipe_from_url(url: str) -> dict[str, Any] | None:
         )
         response.raise_for_status()
     except requests.RequestException as first_exc:
-        logger.warning("Recipe import direct fetch failed for %s: %s", target_url, first_exc)
+        _log_fetch_failure("direct fetch", target_url, first_exc)
         logger.info("Recipe import attempting warm-up retry for %s", origin)
 
         try:
@@ -223,7 +258,7 @@ def import_recipe_from_url(url: str) -> dict[str, Any] | None:
                 },
             )
         except requests.RequestException as warmup_exc:
-            logger.info("Recipe import warm-up request failed for %s: %s", origin, warmup_exc)
+            _log_fetch_failure("warm-up request", origin, warmup_exc)
 
         try:
             response = http.get(
@@ -236,7 +271,7 @@ def import_recipe_from_url(url: str) -> dict[str, Any] | None:
             response.raise_for_status()
             logger.info("Recipe import retry succeeded for %s", target_url)
         except requests.RequestException as retry_exc:
-            logger.warning("Recipe import retry failed for %s: %s", target_url, retry_exc)
+            _log_fetch_failure("retry fetch", target_url, retry_exc)
             raise retry_exc
 
     soup = BeautifulSoup(response.text, "html.parser")
