@@ -916,9 +916,9 @@
       </div>
       <div style="margin-top:12px;">
         <div class="k">Recipe preview</div>
-        <textarea id="importUrlPreviewText" readonly placeholder="Backend recipe import not connected yet."></textarea>
+        <textarea id="importUrlPreviewText" readonly placeholder="Paste a recipe URL to preview it here."></textarea>
         <div class="hint" id="importUrlPreviewMeta" style="margin-top:8px;">
-          Backend recipe import not connected yet.
+          Paste a recipe URL to load a read-only preview.
         </div>
       </div>
     </div>
@@ -3758,7 +3758,7 @@ function resetImportUrlPreview(){
   importUrlPreviewData = null;
   $("importUrlHint").textContent = "Paste a recipe URL to request a preview. This stays read-only until a backend is connected.";
   $("importUrlPreviewText").value = "";
-  $("importUrlPreviewMeta").textContent = "Backend recipe import not connected yet.";
+  $("importUrlPreviewMeta").textContent = "Paste a recipe URL to load a read-only preview.";
   $("importUrlUsePreviewBtn").disabled = true;
 }
 
@@ -4064,6 +4064,7 @@ $("importUrlPreviewBtn")?.addEventListener("click", async ()=>{
   if(!requireOwnerAction()) return;
 
   const url = $("importUrlInput")?.value?.trim() || "";
+  const endpoint = getRecipeImportEndpoint();
   if(!url){
     alert("Paste a recipe URL first.");
     return;
@@ -4082,16 +4083,26 @@ $("importUrlPreviewBtn")?.addEventListener("click", async ()=>{
   }catch(e){
     importUrlPreviewData = null;
     console.warn(e);
-    $("importUrlHint").textContent = e?.message || "Backend recipe import not connected yet.";
-    $("importUrlPreviewText").value = [
-      "Backend recipe import not connected yet.",
-      "",
-      `URL: ${url}`,
-      "",
-      "Configure `window.RECIPE_IMPORT_URL_ENDPOINT` or add",
-      '<meta name="recipe-import-endpoint" content="https://your-backend.example/api/import-recipe-url">'
-    ].join("\n");
-    $("importUrlPreviewMeta").textContent = "Preview is read-only. Save/import stays disabled until the backend is connected.";
+    if(!endpoint){
+      $("importUrlHint").textContent = "Recipe preview is unavailable right now.";
+      $("importUrlPreviewText").value = [
+        "Recipe preview is unavailable right now.",
+        "",
+        `URL: ${url}`,
+        "",
+        "Configure `window.RECIPE_IMPORT_URL_ENDPOINT` or add",
+        '<meta name="recipe-import-endpoint" content="https://your-backend.example/api/import-recipe-url">'
+      ].join("\n");
+      $("importUrlPreviewMeta").textContent = "Preview is read-only until a recipe preview service is connected.";
+    }else{
+      $("importUrlHint").textContent = "Recipe preview is unavailable right now. Please try again.";
+      $("importUrlPreviewText").value = [
+        "Recipe preview is unavailable right now.",
+        "",
+        "Please try again in a moment."
+      ].join("\n");
+      $("importUrlPreviewMeta").textContent = "Paste a recipe URL to load a read-only preview.";
+    }
     $("importUrlUsePreviewBtn").disabled = true;
   }finally{
     $("importUrlPreviewBtn").disabled = false;

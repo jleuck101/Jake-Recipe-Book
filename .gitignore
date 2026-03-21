@@ -1,2 +1,6 @@
 images_raw/
 .DS_Store
+recipe-book-backup.json
+backend/.venv/
+backend/__pycache__/
+backend/*.py[cod]
