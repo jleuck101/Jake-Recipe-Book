@@ -201,14 +201,43 @@ def import_recipe_from_url(url: str) -> dict[str, Any] | None:
     parsed = urlparse(target_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    response = http.get(
-        target_url,
-        timeout=25,
-        headers={
-            "Referer": origin,
-        },
-    )
-    response.raise_for_status()
+    try:
+        response = http.get(
+            target_url,
+            timeout=25,
+            headers={
+                "Referer": origin,
+            },
+        )
+        response.raise_for_status()
+    except requests.RequestException as first_exc:
+        logger.warning("Recipe import direct fetch failed for %s: %s", target_url, first_exc)
+        logger.info("Recipe import attempting warm-up retry for %s", origin)
+
+        try:
+            http.get(
+                origin,
+                timeout=15,
+                headers={
+                    "Referer": origin,
+                },
+            )
+        except requests.RequestException as warmup_exc:
+            logger.info("Recipe import warm-up request failed for %s: %s", origin, warmup_exc)
+
+        try:
+            response = http.get(
+                target_url,
+                timeout=25,
+                headers={
+                    "Referer": origin,
+                },
+            )
+            response.raise_for_status()
+            logger.info("Recipe import retry succeeded for %s", target_url)
+        except requests.RequestException as retry_exc:
+            logger.warning("Recipe import retry failed for %s: %s", target_url, retry_exc)
+            raise retry_exc
 
     soup = BeautifulSoup(response.text, "html.parser")
     scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
