@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html import unescape
 import json
+import logging
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -12,6 +13,7 @@ from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 http = requests.Session()
 http.headers.update(
     {
@@ -25,7 +27,10 @@ http.headers.update(
             "image/avif,image/webp,*/*;q=0.8"
         ),
         "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Cache-Control": "no-cache",
         "DNT": "1",
+        "Pragma": "no-cache",
         "Upgrade-Insecure-Requests": "1",
     }
 )
@@ -193,12 +198,14 @@ def _instruction_list(value: Any) -> list[str]:
 
 def import_recipe_from_url(url: str) -> dict[str, Any] | None:
     target_url = _validate_url(url)
+    parsed = urlparse(target_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
 
     response = http.get(
         target_url,
         timeout=25,
         headers={
-            "Referer": target_url,
+            "Referer": origin,
         },
     )
     response.raise_for_status()
@@ -251,7 +258,8 @@ def import_recipe_url():
         recipe = import_recipe_from_url(url)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        logger.warning("Recipe import fetch failed for %s: %s", url, exc)
         return jsonify({"error": "Failed to fetch recipe URL."}), 502
     except Exception:
         return jsonify({"error": "Recipe import failed."}), 500
