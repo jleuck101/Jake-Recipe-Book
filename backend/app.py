@@ -243,6 +243,17 @@ def _log_fetch_failure(stage: str, target_url: str, exc: requests.RequestExcepti
     logger.warning("Recipe import %s failed for %s: %s", stage, target_url, exc)
 
 
+def _is_blocked_publisher_response(exc: requests.RequestException) -> bool:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return False
+
+    if _looks_like_block_page(response):
+        return True
+
+    return response.status_code in {401, 402, 403, 405, 409, 429, 451, 503}
+
+
 def import_recipe_from_url(url: str) -> dict[str, Any] | None:
     target_url = _validate_url(url)
     parsed = urlparse(target_url)
@@ -336,6 +347,15 @@ def import_recipe_url():
         return jsonify({"error": str(exc)}), 400
     except requests.RequestException as exc:
         logger.warning("Recipe import fetch failed for %s: %s", url, exc)
+        if _is_blocked_publisher_response(exc):
+            return jsonify(
+                {
+                    "error": (
+                        "This website is blocking automated recipe import right now. "
+                        "Try another recipe source or paste the recipe text instead."
+                    )
+                }
+            ), 502
         return jsonify({"error": "Failed to fetch recipe URL."}), 502
     except Exception:
         return jsonify({"error": "Recipe import failed."}), 500
