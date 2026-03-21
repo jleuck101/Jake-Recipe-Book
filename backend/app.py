@@ -211,16 +211,28 @@ def _looks_like_block_page(response: requests.Response) -> bool:
     return any(marker in text for marker in markers)
 
 
+def _response_snippet(response: requests.Response, limit: int = 220) -> str:
+    text = (response.text or "")[:4000]
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.replace("\x00", "")
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
+
+
 def _log_fetch_failure(stage: str, target_url: str, exc: requests.RequestException) -> None:
     response = getattr(exc, "response", None)
     if response is not None:
         logger.warning(
-            "Recipe import %s failed for %s: status=%s final_url=%s block_page=%s",
+            "Recipe import %s failed for %s: status=%s final_url=%s content_type=%r server=%r block_page=%s snippet=%r",
             stage,
             target_url,
             response.status_code,
             response.url,
+            response.headers.get("content-type"),
+            response.headers.get("server"),
             _looks_like_block_page(response),
+            _response_snippet(response),
         )
         return
 
