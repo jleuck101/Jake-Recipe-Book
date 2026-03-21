@@ -1230,6 +1230,7 @@ window._doSignOut = async ()=> {
   recipes: [],
   selectedId: null,
   draftRecipe: null,
+  draftOrigin: null,
   editOpen: false,
   scaleFactor: 1,
   baseServings: null
@@ -1269,7 +1270,12 @@ window._doSignOut = async ()=> {
     const routeId = getRouteRecipeId();
 
     if(!routeId){
-      if(state.selectedId) closeViewer({ updateRoute:false });
+      if(state.selectedId){
+        const closed = closeViewer({ updateRoute:false });
+        if(closed === false && state.selectedId){
+          updateRecipeRoute(state.selectedId, { replace:true });
+        }
+      }
       return;
     }
 
@@ -1287,11 +1293,17 @@ window._doSignOut = async ()=> {
     // Missing/deleted recipe:
     // keep the hash as-is, but do not leave a stale viewer open.
     if(state.selectedId && state.selectedId !== routeId){
-      closeViewer({ updateRoute:false });
+      const closed = closeViewer({ updateRoute:false });
+      if(closed === false && state.selectedId){
+        updateRecipeRoute(state.selectedId, { replace:true });
+      }
       return;
     }
     if(state.selectedId === routeId && !getSelected()){
-      closeViewer({ updateRoute:false });
+      const closed = closeViewer({ updateRoute:false });
+      if(closed === false && state.selectedId){
+        updateRecipeRoute(state.selectedId, { replace:true });
+      }
     }
   }
 
@@ -1937,7 +1949,11 @@ if(ingredient && !toList(r.mainIngredient).includes(ingredient)) return false;
 
       if(tag && !(r.tags||[]).includes(tag)) return false;
 
-      if(maxTime>0 && Number(r.timeMinutes||0)>maxTime) return false;
+      if(maxTime > 0){
+        const recipeTime = Number(r.timeMinutes);
+        if(!Number.isFinite(recipeTime) || recipeTime <= 0) return false;
+        if(recipeTime > maxTime) return false;
+      }
       if(q && !hay(r).includes(q)) return false;
       return true;
 
@@ -2141,10 +2157,17 @@ return out;
     if(cookModeEnabled()) updateCookModeUI();
   }
 
+  function confirmDiscardUrlImportDraft(){
+    if(!(state.draftRecipe && state.draftOrigin === "url-import")) return true;
+    return confirm("Discard this imported recipe draft?");
+  }
 
   function closeViewer({ updateRoute = true, replaceRoute = false } = {}){
+    if(!confirmDiscardUrlImportDraft()) return false;
+
     showViewer(false);
     state.draftRecipe = null;
+    state.draftOrigin = null;
     state.selectedId = null;
     state.editOpen = false;
     hideSnack();
@@ -2155,6 +2178,8 @@ return out;
     if(updateRoute){
       updateRecipeRoute(null, { replace: replaceRoute });
     }
+
+    return true;
   }
 
 
@@ -2778,6 +2803,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
         : await window.FB.updateRecipe(updated);
       if(isDraft){
         state.draftRecipe = null;
+        state.draftOrigin = null;
         state.recipes.unshift(saved);
         state.selectedId = saved.id;
       }else{
@@ -3636,10 +3662,11 @@ function formatImportedIngredients(lines){
   return out.join("\n");
 }
 
-function openDraftInEditor(recipe){
+function openDraftInEditor(recipe, { origin = null } = {}){
   if(!recipe?.id) return null;
 
   state.draftRecipe = { ...recipe };
+  state.draftOrigin = origin;
   state.selectedId = recipe.id;
   state.editOpen = true;
   state.scaleFactor = 1;
@@ -3688,7 +3715,7 @@ function importRecipeFromUrlPreview(preview){
     ].filter(Boolean).join("\n")
   };
 
-  openDraftInEditor(draft);
+  openDraftInEditor(draft, { origin: "url-import" });
   toast("URL preview loaded into draft");
   return draft;
 }
@@ -3769,12 +3796,12 @@ function renderImportUrlPreview(data){
   if(Array.isArray(recipe.ingredients) && recipe.ingredients.length){
     lines.push("");
     lines.push("Ingredients:");
-    lines.push(recipe.ingredients.map(item => `- ${item}`).join("\n"));
+    lines.push(formatImportedIngredients(recipe.ingredients));
   }
   if(Array.isArray(recipe.directions) && recipe.directions.length){
     lines.push("");
     lines.push("Directions:");
-    lines.push(recipe.directions.map((item, index) => `${index + 1}. ${item}`).join("\n"));
+    lines.push(formatImportedDirections(recipe.directions));
   }
 
   importUrlPreviewData = data;
@@ -4042,9 +4069,12 @@ $("importUrlPreviewBtn")?.addEventListener("click", async ()=>{
     return;
   }
 
-  $("importUrlHint").textContent = "Requesting recipe preview…";
+  importUrlPreviewData = null;
+  $("importUrlUsePreviewBtn").disabled = true;
+  $("importUrlPreviewBtn").disabled = true;
+  $("importUrlHint").textContent = "Fetching your recipe preview… If this is the first request, it may take up to about a minute to wake up.";
   $("importUrlPreviewText").value = "";
-  $("importUrlPreviewMeta").textContent = "Waiting for backend response…";
+  $("importUrlPreviewMeta").textContent = "This can take a little longer the first time.";
 
   try{
     const data = await requestRecipeImportPreview(url);
@@ -4063,6 +4093,8 @@ $("importUrlPreviewBtn")?.addEventListener("click", async ()=>{
     ].join("\n");
     $("importUrlPreviewMeta").textContent = "Preview is read-only. Save/import stays disabled until the backend is connected.";
     $("importUrlUsePreviewBtn").disabled = true;
+  }finally{
+    $("importUrlPreviewBtn").disabled = false;
   }
 });
 
