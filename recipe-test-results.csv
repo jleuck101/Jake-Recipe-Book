@@ -1,0 +1,11 @@
+site,recipe,url,status,http_ok,title_ok,image_ok,ingredients_count,directions_count,total_time_present,html_entities_found,needs_manual_review,notes
+Allrecipes,Classic Lasagna,https://www.allrecipes.com/recipe/156037/classic-lasagna/,502,false,false,false,0,0,false,false,true,Failed to fetch recipe URL.; directions_count<=1; ingredients_count<3; missing_title; missing_image
+Sally's Baking Addiction,Best Chocolate Chip Cookies,https://sallysbakingaddiction.com/chewy-chocolate-chip-cookies/,200,true,true,true,10,7,true,false,false,
+Serious Eats,Homemade Fresh Pasta,https://www.seriouseats.com/fresh-egg-pasta,502,false,false,false,0,0,false,false,true,Failed to fetch recipe URL.; directions_count<=1; ingredients_count<3; missing_title; missing_image
+Budget Bytes,Chicken Noodle Soup,https://www.budgetbytes.com/chicken-noodle-soup/,200,true,true,true,14,9,true,false,false,
+Minimalist Baker,30-Minute Coconut Curry,https://minimalistbaker.com/30-minute-coconut-curry/,200,true,true,true,19,6,true,false,false,
+The Woks of Life,Chicken Fried Rice,https://thewoksoflife.com/classic-chicken-fried-rice/,200,true,true,true,18,8,true,false,false,
+King Arthur Baking,Rustic Sourdough Bread,https://www.kingarthurbaking.com/recipes/rustic-sourdough-bread-recipe,200,true,true,true,5,9,true,false,false,
+BBC Good Food,Homemade pasta,https://www.bbcgoodfood.com/recipes/fresh-pasta,200,true,true,true,3,3,true,false,false,
+Minimalist Baker,Thai Yellow Coconut Curry with Mango,https://minimalistbaker.com/thai-yellow-coconut-curry-mango/,200,true,true,true,21,8,true,false,false,
+The Woks of Life,Fried Rice Formula,https://thewoksoflife.com/how-to-make-fried-rice-formula/,200,true,true,true,17,12,true,false,false,

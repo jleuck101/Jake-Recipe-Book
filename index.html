@@ -634,6 +634,7 @@
       <input id="size" type="range" min="2" max="6" value="4" />
       <select id="sort" style="max-width:240px">
         <option value="updated">Sort: Recently updated</option>
+        <option value="recentlyCooked">Sort: Recently Cooked</option>
         <option value="title">Sort: Title A→Z</option>
         <option value="cooked">Sort: Most cooked</option>
         <option value="time">Sort: Shortest time</option>
@@ -1980,6 +1981,21 @@ out.sort((a,b)=>{
 
   // 2) Then apply your selected sort
   if(sort==="updated") return (b.updatedAt||0)-(a.updatedAt||0);
+  if(sort==="recentlyCooked"){
+    const aCookedAt = Number(a.lastCookedAt || 0);
+    const bCookedAt = Number(b.lastCookedAt || 0);
+    if(bCookedAt !== aCookedAt) return bCookedAt - aCookedAt;
+
+    const aCookedCount = Number(a.cookedCount || 0);
+    const bCookedCount = Number(b.cookedCount || 0);
+    if(bCookedCount !== aCookedCount) return bCookedCount - aCookedCount;
+
+    const aUpdatedAt = Number(a.updatedAt || 0);
+    const bUpdatedAt = Number(b.updatedAt || 0);
+    if(bUpdatedAt !== aUpdatedAt) return bUpdatedAt - aUpdatedAt;
+
+    return (a.title||"").localeCompare(b.title||"");
+  }
   if(sort==="title") return (a.title||"").localeCompare(b.title||"");
   if(sort==="cooked") return (Number(b.cookedCount||0)-Number(a.cookedCount||0));
   if(sort==="time") return (Number(a.timeMinutes||1e9)-Number(b.timeMinutes||1e9));
