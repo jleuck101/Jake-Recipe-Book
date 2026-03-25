@@ -59,6 +59,7 @@
     .btn.danger{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#fecaca}
     .btn.ghost{background:transparent}
     .btn.small{padding:8px 10px;border-radius:10px;font-size:12px}
+    .btn.tiny{padding:6px 9px;border-radius:10px;font-size:11px}
 
     .btnSm{
   padding:6px 10px;
@@ -418,16 +419,194 @@
       border-radius:14px;
     }
 
-    /* Edit modal inside viewer */
+    /* Editor drawer inside viewer */
+    .viewer.editing{overflow:hidden}
+    .editScrim{
+      position:fixed;
+      inset:0;
+      background:rgba(5,7,12,.58);
+      display:none;
+      z-index:108;
+    }
+    .editScrim.show{display:block}
     .editPanel{
+      position:fixed;
+      top:0;
+      right:0;
+      width:min(720px, 100vw);
+      height:100%;
+      border-left:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(16,18,26,.98) 0%, rgba(11,12,16,.98) 100%);
+      box-shadow:-18px 0 44px rgba(0,0,0,.38);
+      display:flex;
+      flex-direction:column;
+      z-index:110;
+      transform:translateX(100%);
+      transition:transform .18s ease;
+    }
+    .editPanel.show{transform:translateX(0)}
+    .editPanelHd{
+      padding:14px 16px 12px;
+      border-bottom:1px solid var(--line);
+      background:rgba(17,19,28,.96);
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      justify-content:space-between;
+      flex-wrap:wrap;
+    }
+    .editPanelTitle{
+      font-size:16px;
+      font-weight:950;
+      letter-spacing:.2px;
+      margin:0;
+    }
+    .editPanelBody{
+      flex:1;
+      overflow:auto;
+      padding:14px 16px 88px;
+      -webkit-overflow-scrolling:touch;
+    }
+    .editPanelFt{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      padding:12px 16px;
+      border-top:1px solid var(--line);
+      background:rgba(17,19,28,.96);
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+    }
+    .editTabs{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .editTab{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:12px;
+      font-weight:850;
+      cursor:pointer;
+    }
+    .editTab.active{
+      background:rgba(124,58,237,.18);
+      border-color:rgba(124,58,237,.44);
+      color:#ddd6fe;
+    }
+    .editSection{
+      display:none;
+      gap:12px;
+    }
+    .editSection.show{display:grid}
+    .editSectionCard{
       border:1px solid var(--line);
       border-radius:16px;
-      background:rgba(18,20,27,.80);
-      overflow:hidden;
-      margin-top:14px;
-      display:none;
+      background:rgba(255,255,255,.03);
+      padding:14px;
     }
-    .editPanel.show{display:block}
+    .editSectionTitle{
+      margin:0 0 6px;
+      font-size:14px;
+      font-weight:950;
+      letter-spacing:.2px;
+    }
+    .editSectionIntro{
+      margin:0 0 12px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .editFieldStack{
+      display:grid;
+      gap:10px;
+    }
+    .editFieldHd{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-bottom:6px;
+    }
+    .editFieldSpan{
+      grid-column:1 / -1;
+    }
+    .editTextAreaLg{min-height:200px}
+    .editTextAreaMd{min-height:150px}
+    .tagComposer{
+      display:grid;
+      gap:10px;
+    }
+    .tagChipList{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .tagChip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      border:1px solid rgba(124,58,237,.34);
+      background:rgba(124,58,237,.14);
+      color:#ede9fe;
+      border-radius:999px;
+      padding:7px 12px;
+      font-size:12px;
+      font-weight:850;
+      line-height:1;
+      cursor:pointer;
+    }
+    .tagChip.remove{background:rgba(255,255,255,.05);border-color:var(--line);color:var(--text)}
+    .tagChip.remove:hover,
+    .tagChip:hover{border-color:rgba(255,255,255,.26)}
+    .tagChipX{font-size:11px;opacity:.78}
+    .tagQuickGrid{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      min-height:40px;
+    }
+    .tagQuickBtn{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      border-radius:999px;
+      padding:7px 12px;
+      font-size:12px;
+      font-weight:800;
+      cursor:pointer;
+    }
+    .tagQuickBtn:hover{border-color:rgba(255,255,255,.24)}
+    .tagQuickBtn.addNew{
+      border-style:dashed;
+      border-color:rgba(124,58,237,.44);
+      background:rgba(124,58,237,.10);
+    }
+    .emptyInline{
+      padding:10px 12px;
+      border:1px dashed rgba(255,255,255,.12);
+      border-radius:12px;
+      color:var(--muted);
+      font-size:12px;
+      background:rgba(255,255,255,.02);
+    }
+    @media(max-width:720px){
+      .editPanel{
+        width:100vw;
+        border-left:none;
+      }
+      .editPanelBody{padding-bottom:96px}
+      .editPanelFt{align-items:stretch}
+      .editPanelFt .btn{flex:1}
+    }
 
     .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     @media(max-width:650px){.two{grid-template-columns:1fr}}
@@ -491,6 +670,62 @@
   z-index: 9999;
   min-width: 180px;
 }
+.advMenu .advPanel.right{
+  left:auto;
+  right:0;
+}
+.viewerActions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  align-items:center;
+}
+.viewerActionMenu .advPanel{
+  min-width:220px;
+}
+.viewerActionMenu .advPanel .btn{
+  width:100%;
+  text-align:left;
+}
+.viewerActionHint{
+  font-size:11px;
+  color:var(--muted);
+  line-height:1.35;
+}
+.viewerTagRow{
+  display:grid;
+  gap:10px;
+}
+.viewerTagHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.viewerTagList{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.viewerTagPill{
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.04);
+  color:var(--text);
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:12px;
+  font-weight:800;
+}
+.quickTagPanel{
+  display:none;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(255,255,255,.03);
+  padding:12px;
+}
+.quickTagPanel.show{display:grid;gap:10px}
 
 /* Paste recipe modal */
 .pasteModal{
@@ -655,14 +890,20 @@
   <div class="viewerTop">
     <div class="wrap">
       <div class="viewerHeader">
-        <button class="btn ghost" id="backBtn">← Back</button>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn ghost" id="backBtn">← Back to Recipes</button>
+        <div class="viewerActions">
   <button class="btn small ok" id="markCookedBtn" title="Prevents double-taps; offers Undo">Cooked +1</button>
-  <button class="btn small" id="copyGroceriesBtn" title="Copy ingredients to paste into Apple Reminders">Copy groceries</button>
-  <button class="btn small" id="downloadGroceriesBtn" title="Download ingredients as a .txt file">Groceries .txt</button>
-  <button class="btn small" id="downloadOneBtn" title="Downloads a clean 1-page recipe card (uses your current scaling)">Download recipe</button>
-  <button class="btn" id="printBtn">Print Card</button>
-  <button class="btn small" id="cookModeBtn" title="Bigger text + tries to keep screen awake">Cook Mode</button>
+  <button class="btn small" id="copyGroceriesBtn" title="Copies the current ingredient list for Notes or Reminders">Copy ingredients</button>
+  <details id="viewerExportMenu" class="advMenu viewerActionMenu">
+    <summary class="btn small">Export</summary>
+    <div class="advPanel right">
+      <button class="btn small" id="printBtn" type="button">Print card</button>
+      <button class="btn small" id="downloadOneBtn" type="button">Recipe file</button>
+      <button class="btn small" id="downloadGroceriesBtn" type="button">Ingredients .txt</button>
+      <div class="viewerActionHint">Uses your current recipe scaling.</div>
+    </div>
+  </details>
+  <button class="btn small" id="cookModeBtn" title="Bigger text and fewer accidental exits while cooking">Cook Mode</button>
   <button class="btn small primary" id="editToggleBtn">Edit</button>
   <button class="btn small danger" id="deleteBtn">Delete</button>
 </div>
@@ -688,6 +929,26 @@
       </div>
       <div class="sectionBd">
         <div class="hint" id="vSource"></div>
+        <div class="viewerTagRow" id="vTagsWrap" style="display:none;margin-top:12px;">
+          <div class="viewerTagHead">
+            <div class="k" style="margin:0;">Tags</div>
+            <button class="btn tiny" id="quickTagsBtn" type="button" style="display:none;">+ Tag</button>
+          </div>
+          <div class="viewerTagList" id="vTagsList"></div>
+          <div class="quickTagPanel" id="quickTagPanel">
+            <input id="quickTagSearch" placeholder="Find or add a tag" autocomplete="off" />
+            <div class="hint" id="quickTagSummary">No tags selected</div>
+            <div class="tagChipList" id="quickSelectedTags"></div>
+            <div>
+              <div class="hint" style="margin-bottom:8px;" id="quickTagHint">Quick picks from your saved tag list.</div>
+              <div class="tagQuickGrid" id="quickTagPick"></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn small" id="quickTagCancelBtn" type="button">Cancel</button>
+              <button class="btn small primary" id="quickTagSaveBtn" type="button">Save tags</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -741,130 +1002,165 @@
       <div class="sectionBd"><div class="pre" id="vNotes"></div></div>
     </div>
 
-    <!-- Edit panel (only shows if you click Edit) -->
-    <div class="editPanel" id="editPanel">
-      <div class="sectionHd">
-        <div class="h2">Edit recipe</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn small" id="cancelEditBtn">Cancel</button>
-          <button class="btn small primary" id="saveEditBtn">Save</button>
+    <div class="editScrim" id="editScrim"></div>
+
+    <!-- Edit panel (drawer over viewer) -->
+    <div class="editPanel" id="editPanel" role="dialog" aria-modal="true" aria-labelledby="editPanelTitle" aria-hidden="true">
+      <div class="editPanelHd">
+        <div>
+          <h3 class="editPanelTitle" id="editPanelTitle">Edit recipe</h3>
+          <div class="hint">Keep your place in the recipe while you make focused changes. Save updates here and they sync when online.</div>
+          <div class="editTabs" id="editTabs" role="tablist" aria-label="Edit sections">
+            <button class="editTab active" id="editTab-basics" type="button" data-section="basics" role="tab" aria-selected="true" aria-controls="editSection-basics">Basics</button>
+            <button class="editTab" id="editTab-recipe" type="button" data-section="recipe" role="tab" aria-selected="false" aria-controls="editSection-recipe">Recipe</button>
+            <button class="editTab" id="editTab-more" type="button" data-section="more" role="tab" aria-selected="false" aria-controls="editSection-more">More</button>
+          </div>
         </div>
+        <button class="btn small ghost" id="closeEditBtn" type="button" aria-label="Close editor">Close</button>
       </div>
-      <div class="sectionBd">
-        <div class="two">
-          <div>
-            <div class="k">Title</div>
-            <input id="eTitle"/>
+
+      <div class="editPanelBody">
+        <section class="editSection show" id="editSection-basics" role="tabpanel" aria-labelledby="editTab-basics">
+          <div class="editSectionCard">
+            <h4 class="editSectionTitle">Basics</h4>
+            <p class="editSectionIntro">The fields you reach for most often, without turning the whole recipe into one long form.</p>
+            <div class="editFieldStack">
+              <div class="two">
+                <div>
+                  <div class="k">Title</div>
+                  <input id="eTitle"/>
+                </div>
+                <div>
+                  <div class="k">Cuisine</div>
+                  <input id="eCuisine" placeholder="Mexican (optional)" autocomplete="off"/>
+                  <div class="suggestRow" id="cuisineSuggestions"></div>
+                </div>
+              </div>
+
+              <div class="two">
+                <div>
+                  <div class="k">Dish Type</div>
+                  <input id="eDishType" placeholder="Breakfast, dinner, snack, beverage, dip/spread, sauce/dressing…" autocomplete="off"/>
+                  <div class="suggestRow" id="dishTypeSuggestions"></div>
+                </div>
+                <div>
+                  <div class="k">Base</div>
+                  <input id="eBase" placeholder="Soup, sandwich, rice, pasta…" autocomplete="off"/>
+                  <div class="suggestRow" id="baseSuggestions"></div>
+                </div>
+              </div>
+
+              <div class="two">
+                <div>
+                  <div class="k">Main ingredient / protein</div>
+                  <input id="eIngredient" placeholder="chicken, tofu, beans…" autocomplete="off"/>
+                  <div class="suggestRow" id="ingredientSuggestions"></div>
+                </div>
+                <div>
+                  <div class="k">Equipment</div>
+                  <input id="eEquipment" placeholder="Instant Pot, oven, air fryer…" autocomplete="off"/>
+                  <div class="suggestRow" id="equipmentSuggestions"></div>
+                </div>
+              </div>
+
+              <div class="two">
+                <div>
+                  <div class="k">Time (minutes)</div>
+                  <input id="eTime" type="number" min="0" step="5" placeholder="30"/>
+                </div>
+                <div>
+                  <div class="k">Servings</div>
+                  <input id="eServings" placeholder="yields 4"/>
+                </div>
+              </div>
+
+              <div class="editFieldSpan">
+                <div class="editFieldHd">
+                  <div class="k" style="margin:0;">Tags</div>
+                  <div class="hint" id="tagSummary">No tags selected</div>
+                </div>
+                <div class="tagComposer">
+                  <input id="editTagSearch" placeholder="Find or add a tag, then press Enter" autocomplete="off" />
+                  <div class="tagChipList" id="selectedTags"></div>
+                  <div>
+                    <div class="hint" style="margin-bottom:8px;" id="tagPickerHint">Quick picks from your saved tag list.</div>
+                    <div class="tagQuickGrid" id="tagQuickPick"></div>
+                  </div>
+                  <input id="eTags" placeholder="weeknight, spicy, meal prep" autocomplete="off" style="display:none;" />
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-          <div class="k">Cuisine</div>
-          <input id="eCuisine" placeholder="Mexican (optional)" autocomplete="off"/>
-          <div class="suggestRow" id="cuisineSuggestions"></div>
+        </section>
 
+        <section class="editSection" id="editSection-recipe" role="tabpanel" aria-labelledby="editTab-recipe" hidden>
+          <div class="editSectionCard">
+            <h4 class="editSectionTitle">Recipe text</h4>
+            <p class="editSectionIntro">Work on the actual cooking instructions without extra metadata getting in the way.</p>
+            <div class="editFieldStack">
+              <div>
+                <div class="k">Ingredients</div>
+                <textarea id="eIngredients" class="editTextAreaLg"></textarea>
+              </div>
+              <div>
+                <div class="k">Directions</div>
+                <textarea id="eDirections" class="editTextAreaLg"></textarea>
+              </div>
+              <div>
+                <div class="k">Notes</div>
+                <textarea id="eNotes" class="editTextAreaMd"></textarea>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div class="two" style="margin-top:10px;">
-          <div>
-            <div class="k">Dish Type</div>
-            <input id="eDishType" placeholder="Breakfast, dinner, snack, beverage, dip/spread, sauce/dressing…" autocomplete="off"/>
-            <div class="suggestRow" id="dishTypeSuggestions"></div>
+        <section class="editSection" id="editSection-more" role="tabpanel" aria-labelledby="editTab-more" hidden>
+          <div class="editSectionCard">
+            <h4 class="editSectionTitle">Source, stats, and image</h4>
+            <p class="editSectionIntro">The supporting details stay available, but no longer crowd the main editing flow.</p>
+            <div class="editFieldStack">
+              <div>
+                <div class="k">Source URL</div>
+                <input id="eSourceUrl" placeholder="https://…"/>
+              </div>
+
+              <div class="two">
+                <div>
+                  <div class="k">Dishes created</div>
+                  <input id="eDishes" type="number" min="0" step="1" placeholder="2"/>
+                </div>
+                <div>
+                  <div class="k">Cooked count (editable)</div>
+                  <input id="eCookedCount" type="number" min="0" step="1" placeholder="0"/>
+                </div>
+              </div>
+
+              <div>
+                <div class="k">Recipe image</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                  <button class="btn small" id="addImageBtn" type="button">Add / Change image</button>
+                  <button class="btn small danger" id="removeImageBtn" type="button" style="display:none;">Remove image</button>
+                  <input id="imageFileInput" type="file" accept="image/*" style="display:none;" />
+                </div>
+
+                <img id="eImagePreview" alt="" style="display:none;max-width:100%;height:auto;margin-top:10px;border-radius:14px;border:1px solid var(--line);" />
+
+                <input id="eImageUrl" style="display:none;" />
+                <input id="eImagePath" style="display:none;" />
+
+                <div class="hint" style="margin-top:6px;">On iPhone: choose from Photos or take a new picture.</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div class="k">Base</div>
-            <input id="eBase" placeholder="Soup, sandwich, rice, pasta…" autocomplete="off"/>
-            <div class="suggestRow" id="baseSuggestions"></div>
-          </div>
+        </section>
+      </div>
+
+      <div class="editPanelFt">
+        <div class="hint" id="editStats"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn small" id="cancelEditBtn" type="button">Cancel</button>
+          <button class="btn small primary" id="saveEditBtn" type="button">Save recipe</button>
         </div>
-        
-
-<div class="two" style="margin-top:10px;">
-  <div>
-    <div class="k">Main ingredient / protein</div>
-    <input id="eIngredient" placeholder="chicken, tofu, beans…" autocomplete="off"/>
-    <div class="suggestRow" id="ingredientSuggestions"></div>
-  </div>
-  <div>
-    <div class="k">Time (minutes)</div>
-    <input id="eTime" type="number" min="0" step="5" placeholder="30"/>
-  </div>
-</div>
-
-<div class="two" style="margin-top:10px;">
-  <div>
-    <div class="k">Equipment</div>
-    <input id="eEquipment" placeholder="Instant Pot, oven, air fryer…" autocomplete="off"/>
-    <div class="suggestRow" id="equipmentSuggestions"></div>
-  </div>
-  <div>
-    <div class="k">Tags</div>
-    <input id="eTags" placeholder="weeknight, spicy, meal prep" autocomplete="off"/>
-    <div class="suggestRow" id="tagSuggestions"></div>
-  </div>
-</div>
-
-
-<div class="two" style="margin-top:10px;">
-  <div>
-    <div class="k">Dishes created</div>
-    <input id="eDishes" type="number" min="0" step="1" placeholder="2"/>
-  </div>
-  <div>
-    <div class="k">Cooked count (editable)</div>
-    <input id="eCookedCount" type="number" min="0" step="1" placeholder="0"/>
-  </div>
-</div>
-
-<div class="two" style="margin-top:10px;">
-  <div>
-    <div class="k">Servings</div>
-    <input id="eServings" placeholder="yields 4"/>
-  </div>
-  <div></div>
-</div>
-
-
-<div style="margin-top:10px;">
-  <div class="k">Recipe image</div>
-
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <button class="btn small" id="addImageBtn" type="button">Add / Change image</button>
-    <button class="btn small danger" id="removeImageBtn" type="button" style="display:none;">Remove image</button>
-
-    <!-- iOS: this opens Photos and also offers Camera (capture is a hint) -->
-    <input id="imageFileInput" type="file" accept="image/*" style="display:none;" />
-
-  </div>
-
-  <img id="eImagePreview" alt="" style="display:none;max-width:100%;height:auto;margin-top:10px;border-radius:14px;border:1px solid var(--line);" />
-
-  <!-- keep these for saving -->
-  <input id="eImageUrl" style="display:none;" />
-  <input id="eImagePath" style="display:none;" />
-
-  <div class="hint" style="margin-top:6px;">On iPhone: choose from Photos or take a new picture.</div>
-</div>
-
-
-        <div style="margin-top:10px;">
-          <div class="k">Source URL</div>
-          <input id="eSourceUrl" placeholder="https://…"/>
-        </div>
-
-        <div style="margin-top:10px;">
-          <div class="k">Ingredients</div>
-          <textarea id="eIngredients"></textarea>
-        </div>
-        <div style="margin-top:10px;">
-          <div class="k">Directions</div>
-          <textarea id="eDirections"></textarea>
-        </div>
-        <div style="margin-top:10px;">
-          <div class="k">Notes</div>
-          <textarea id="eNotes"></textarea>
-        </div>
-
-        <div class="hint" style="margin-top:10px;" id="editStats"></div>
       </div>
     </div>
 
@@ -1196,13 +1492,13 @@ function setOwnerUI(owner, signedIn){
   show("saveEditBtn", !!owner);
   show("markCookedBtn", !!owner);
   show("addImageBtn", !!owner);
+  show("quickTagsBtn", !!owner);
   if(!owner) show("removeImageBtn", false);
 
   if(!owner && state.editOpen){
-    state.editOpen = false;
-    $("editPanel").classList.remove("show");
-    $("editToggleBtn").textContent = "Edit";
+    closeEditPanel({ restoreFocus:false });
   }
+  if(!owner) closeQuickTagPanel();
 }
 
 window._doSignOut = async ()=> {
@@ -1233,6 +1529,10 @@ window._doSignOut = async ()=> {
   draftRecipe: null,
   draftOrigin: null,
   editOpen: false,
+  editSection: "basics",
+  editReturnFocusId: "",
+  quickTagsOpen: false,
+  quickTagDraft: [],
   scaleFactor: 1,
   baseServings: null
 };
@@ -1510,6 +1810,237 @@ function renderSuggestChips(hostId, values, q, onPick){
   });
 }
 
+function getEditTags(){
+  return canonicalList($("eTags")?.value || "");
+}
+
+function setEditTags(tags){
+  const normalized = canonicalList(tags);
+  $("eTags").value = normalized.join(", ");
+  renderTagEditor();
+}
+
+function toggleEditTag(tag){
+  const wanted = canonicalTag(tag);
+  if(!wanted) return;
+  const current = getEditTags();
+  const next = current.some(x => x.toLowerCase() === wanted.toLowerCase())
+    ? current.filter(x => x.toLowerCase() !== wanted.toLowerCase())
+    : [...current, wanted];
+  setEditTags(next);
+}
+
+function addEditTag(tag){
+  const wanted = canonicalTag(tag);
+  if(!wanted) return false;
+  const current = getEditTags();
+  if(current.some(x => x.toLowerCase() === wanted.toLowerCase())){
+    renderTagEditor();
+    return false;
+  }
+  setEditTags([...current, wanted]);
+  return true;
+}
+
+function renderTagEditor(){
+  const searchEl = $("editTagSearch");
+  if(!searchEl) return;
+  renderTagPickerUI({
+    tags: getEditTags(),
+    search: searchEl.value || "",
+    selectedHostId: "selectedTags",
+    quickHostId: "tagQuickPick",
+    summaryId: "tagSummary",
+    hintId: "tagPickerHint",
+    emptySelectedText: "No tags yet. Use quick picks or add one from search.",
+    onToggle(tag){
+      toggleEditTag(tag);
+      searchEl.focus();
+    },
+    onAdd(tag){
+      if(addEditTag(tag)) searchEl.value = "";
+      renderTagEditor();
+      searchEl.focus();
+    }
+  });
+}
+
+function closeQuickTagPanel(){
+  state.quickTagsOpen = false;
+  $("quickTagPanel")?.classList.remove("show");
+  $("quickTagSearch").value = "";
+}
+
+function openQuickTagPanel(){
+  if(!requireOwnerAction()) return;
+  const r = getSelected();
+  if(!r) return;
+  state.quickTagDraft = canonicalList(r.tags || []);
+  state.quickTagsOpen = true;
+  $("quickTagPanel")?.classList.add("show");
+  renderQuickTagPanel();
+  setTimeout(()=> $("quickTagSearch")?.focus(), 30);
+}
+
+function renderQuickTagPanel(){
+  const panel = $("quickTagPanel");
+  const searchEl = $("quickTagSearch");
+  if(!panel || !searchEl) return;
+
+  panel.classList.toggle("show", !!state.quickTagsOpen);
+  if(!state.quickTagsOpen) return;
+
+  renderTagPickerUI({
+    tags: state.quickTagDraft || [],
+    search: searchEl.value || "",
+    selectedHostId: "quickSelectedTags",
+    quickHostId: "quickTagPick",
+    summaryId: "quickTagSummary",
+    hintId: "quickTagHint",
+    emptySelectedText: "No tags yet. Use quick picks or add one from search.",
+    onToggle(tag){
+      const wanted = canonicalTag(tag);
+      const current = canonicalList(state.quickTagDraft || []);
+      state.quickTagDraft = current.some(x => x.toLowerCase() === wanted.toLowerCase())
+        ? current.filter(x => x.toLowerCase() !== wanted.toLowerCase())
+        : [...current, wanted];
+      renderQuickTagPanel();
+      searchEl.focus();
+    },
+    onAdd(tag){
+      const wanted = canonicalTag(tag);
+      if(!wanted) return;
+      const current = canonicalList(state.quickTagDraft || []);
+      if(!current.some(x => x.toLowerCase() === wanted.toLowerCase())){
+        state.quickTagDraft = [...current, wanted];
+      }
+      searchEl.value = "";
+      renderQuickTagPanel();
+      searchEl.focus();
+    }
+  });
+}
+
+async function saveQuickTags(){
+  if(!requireOwnerAction()) return;
+  const r = getSelected();
+  if(!r) return;
+
+  const nextTags = canonicalList(state.quickTagDraft || []);
+  const idx = state.recipes.findIndex(x=>x.id===r.id);
+  const isDraft = !!(state.draftRecipe && state.draftRecipe.id === r.id);
+
+  if(isDraft){
+    state.draftRecipe = { ...state.draftRecipe, tags: nextTags, updatedAt: Date.now() };
+    closeQuickTagPanel();
+    renderViewer();
+    toast("draft tags updated");
+    return;
+  }
+
+  if(idx < 0) return;
+
+  try{
+    const saved = await window.FB.updateRecipe({
+      ...state.recipes[idx],
+      tags: nextTags,
+      updatedAt: Date.now()
+    });
+    state.recipes[idx] = saved;
+    saveLocal({ skipCloud:true });
+  }catch(e){
+    console.warn(e);
+    toast("tag save failed");
+    return;
+  }
+
+  refreshFilterOptions();
+  rebuildTagCaches();
+  renderGrid();
+  renderViewer();
+  refreshEditSuggestions();
+  closeQuickTagPanel();
+  toast("tags updated");
+}
+
+function renderTagPickerUI({
+  tags = [],
+  search = "",
+  selectedHostId,
+  quickHostId,
+  summaryId,
+  hintId,
+  emptySelectedText,
+  onToggle,
+  onAdd
+} = {}){
+  const selectedHost = $(selectedHostId);
+  const quickHost = $(quickHostId);
+  const summary = $(summaryId);
+  const hintEl = $(hintId);
+  if(!selectedHost || !quickHost || !summary || !hintEl) return;
+
+  const selected = canonicalList(tags);
+  selectedHost.innerHTML = "";
+  quickHost.innerHTML = "";
+
+  if(selected.length){
+    selected.forEach(tag=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tagChip remove";
+      btn.innerHTML = `<span>${escapeHtml(tag)}</span><span class="tagChipX" aria-hidden="true">Remove</span>`;
+      btn.setAttribute("aria-label", `Remove tag ${tag}`);
+      btn.addEventListener("click", ()=> onToggle(tag));
+      selectedHost.appendChild(btn);
+    });
+    summary.textContent = `${selected.length} tag${selected.length === 1 ? "" : "s"} selected`;
+  }else{
+    const empty = document.createElement("div");
+    empty.className = "emptyInline";
+    empty.textContent = emptySelectedText;
+    selectedHost.appendChild(empty);
+    summary.textContent = "No tags selected";
+  }
+
+  const q = canonicalTag(search || "");
+  const selectedSet = new Set(selected.map(t => t.toLowerCase()));
+  const filtered = ALL_TAGS
+    .filter(tag => {
+      if(selectedSet.has(String(tag).toLowerCase())) return false;
+      if(!q) return true;
+      return String(tag).toLowerCase().includes(q.toLowerCase());
+    })
+    .slice(0, 24);
+
+  if(q && !selectedSet.has(q.toLowerCase()) && !ALL_TAGS.some(tag => String(tag).toLowerCase() === q.toLowerCase())){
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "tagQuickBtn addNew";
+    addBtn.textContent = `+ Add "${q}"`;
+    addBtn.addEventListener("click", ()=> onAdd(q));
+    quickHost.appendChild(addBtn);
+  }
+
+  filtered.forEach(tag=>{
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tagQuickBtn";
+    btn.textContent = tag;
+    btn.addEventListener("click", ()=> onToggle(tag));
+    quickHost.appendChild(btn);
+  });
+
+  if(!quickHost.children.length){
+    const empty = document.createElement("div");
+    empty.className = "emptyInline";
+    empty.textContent = q ? "No matching saved tags. Press Enter to add this one." : "No saved tags yet. Add a few here and they’ll become quick picks.";
+    quickHost.appendChild(empty);
+  }
+
+  hintEl.textContent = q ? `Matching tags for "${q}"` : "Quick picks from your saved tag list.";
+}
+
 // Replace the LAST comma token with the selected value (for comma-fields)
 function replaceLastCommaTokenWith(inputId, value, opts={}){
   const input = $(inputId);
@@ -1546,7 +2077,6 @@ function refreshEditSuggestions(){
   const baseQ       = lastCommaToken(baseEl?.value || "");
   const ingredientQ = lastCommaToken(ingEl?.value || "");
   const equipmentQ  = lastCommaToken(equipEl?.value || "");
-  const tagQ        = lastCommaToken($("eTags")?.value || "");
 
 
   // Only add a trailing ", " automatically if you're already using commas in that field
@@ -1577,10 +2107,7 @@ function refreshEditSuggestions(){
     replaceLastCommaTokenWith("eEquipment", v); // trailing comma behavior kept
   });
 
-
-  renderSuggestChips("tagSuggestions", ALL_TAGS, tagQ, (v)=>{
-    replaceLastCommaTokenWith("eTags", v);       // trailing comma behavior kept
-  });
+  renderTagEditor();
 }
 
 
@@ -1813,9 +2340,11 @@ function saveLocal(opts={}){
   async function updateCookModeUI(){
     const btn = $("cookModeBtn");
     const hint = $("wakeHint");
+    const backBtn = $("backBtn");
     const on = cookModeEnabled();
 
-    if(btn) btn.textContent = on ? "Cook Mode: On" : "Cook Mode";
+    if(btn) btn.textContent = on ? "Exit Cook Mode" : "Cook Mode";
+    if(backBtn) backBtn.textContent = on ? "← Exit recipe" : "← Back to Recipes";
 
     if(!hint) return;
 
@@ -1834,12 +2363,12 @@ function saveLocal(opts={}){
     }
 
     hint.style.display = "";
-    hint.textContent = "Tip: keeping your screen awake while cooking…";
+    hint.textContent = "Cook mode is on. Screen will stay awake when supported.";
 
     const ok = await requestWakeLock();
     hint.textContent = ok
-      ? "Screen awake: enabled (if supported)."
-      : "Tip: set your phone's Screen Timeout longer while cooking.";
+      ? "Cook mode is on. Screen awake: enabled when supported."
+      : "Cook mode is on. Set a longer screen timeout if your device still sleeps.";
   }
 
   function setCookMode(on){
@@ -2149,16 +2678,19 @@ return out;
 
   function openViewer(id, { updateRoute = true, replaceRoute = false } = {}){
     if(!(state.draftRecipe && state.draftRecipe.id === id) && !state.recipes.some(r => r.id === id)) return;
+    const openingDraft = !!(state.draftRecipe && state.draftRecipe.id === id);
 
     state.selectedId = id;
-    state.editOpen = false;
+    if(!openingDraft){
+      state.draftRecipe = null;
+      state.draftOrigin = null;
+    }
+    closeEditPanel({ restoreFocus:false });
+    closeQuickTagPanel();
 
     state.scaleFactor = 1;
     state.baseServings = null;
     $("scaleServingsTarget").value = "";
-
-    $("editPanel").classList.remove("show");
-    $("editToggleBtn").textContent = "Edit";
 
     renderViewer();      // computes baseServings + renders default scale
     applySavedScale();   // restores last-used scale for this recipe (if any)
@@ -2169,23 +2701,42 @@ return out;
       updateRecipeRoute(id, { replace: replaceRoute });
     }
 
-    // If Cook Mode is on, update hint + try wake lock now (user gesture is the click)
+    // If Cook Mode is on, refresh the wake-lock hint when opening the viewer.
     if(cookModeEnabled()) updateCookModeUI();
   }
 
   function confirmDiscardUrlImportDraft(){
-    if(!(state.draftRecipe && state.draftOrigin === "url-import")) return true;
+    if(!(state.draftRecipe && state.draftRecipe.id === state.selectedId && state.draftOrigin === "url-import")) return true;
     return confirm("Discard this imported recipe draft?");
+  }
+
+  // Viewer close model:
+  // - `closeViewer()` exits the recipe page itself
+  // - `dismissViewerSubpanel()` only dismisses local UI inside the viewer
+  // Escape/overlay use the local path; the Back button uses the page-exit path.
+  function getViewerExportMenu(){
+    return $("viewerExportMenu");
+  }
+
+  function closeViewerExportMenu(){
+    const menu = getViewerExportMenu();
+    if(menu) menu.open = false;
+  }
+
+  function viewerExportMenuIsOpen(){
+    return !!getViewerExportMenu()?.open;
   }
 
   function closeViewer({ updateRoute = true, replaceRoute = false } = {}){
     if(!confirmDiscardUrlImportDraft()) return false;
 
+    closeEditPanel({ restoreFocus:false });
+    closeQuickTagPanel();
+    closeViewerExportMenu();
     showViewer(false);
     state.draftRecipe = null;
     state.draftOrigin = null;
     state.selectedId = null;
-    state.editOpen = false;
     hideSnack();
     releaseWakeLock();
     const hint = $("wakeHint");
@@ -2196,6 +2747,26 @@ return out;
     }
 
     return true;
+  }
+
+  function dismissViewerSubpanel(){
+    if(state.editOpen){
+      closeEditPanel();
+      return true;
+    }
+    if(state.quickTagsOpen){
+      closeQuickTagPanel();
+      return true;
+    }
+    if(viewerExportMenuIsOpen()){
+      closeViewerExportMenu();
+      return true;
+    }
+    return false;
+  }
+
+  function exitRecipePage(){
+    return closeViewer();
   }
 
 
@@ -2621,12 +3192,39 @@ function parseFirstNumberAnywhere(text){
 
 
     if(r.dishesCount != null) info.appendChild(pill("dishes: " + r.dishesCount));
-    if((r.tags||[]).length) info.appendChild(pill("tags: " + r.tags.join(", ")));
     if((r.cookedCount||0)>0) info.appendChild(pill("cooked: " + r.cookedCount));
 
     $("vSource").innerHTML = r.sourceUrl
       ? `Source: <a href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(r.sourceUrl)}</a>`
       : `<span class="muted">No source URL</span>`;
+
+    const tagsWrap = $("vTagsWrap");
+    const tagsList = $("vTagsList");
+    const quickBtn = $("quickTagsBtn");
+    const owner = currentUserIsOwner();
+    const tags = canonicalList(r.tags || []);
+    if(tagsWrap && tagsList && quickBtn){
+      tagsList.innerHTML = "";
+      tags.forEach(tag=>{
+        const chip = document.createElement("span");
+        chip.className = "viewerTagPill";
+        chip.textContent = tag;
+        tagsList.appendChild(chip);
+      });
+
+      if(tags.length === 0){
+        const empty = document.createElement("div");
+        empty.className = "hint";
+        empty.textContent = owner ? "No tags yet." : "No tags";
+        tagsList.appendChild(empty);
+      }
+
+      quickBtn.style.display = owner ? "" : "none";
+      quickBtn.textContent = state.quickTagsOpen ? "Close tags" : "+ Tag";
+      tagsWrap.style.display = (tags.length || owner) ? "" : "none";
+    }
+
+    renderQuickTagPanel();
 
     state.baseServings = parseFirstNumberAnywhere(r.servings);
     updateScaleUI();
@@ -2643,7 +3241,6 @@ function parseFirstNumberAnywhere(text){
       $("vNotesWrap").style.display = "none";
     }
 
-    if(state.editOpen) fillEditForm(r);
   }
 
   function updateScaleUI(){
@@ -2759,23 +3356,73 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     ].filter(Boolean);
     $("editStats").textContent = parts.join(" • ");
 
+    $("editTagSearch").value = "";
     refreshEditSuggestions();
 
   }
 
-  function toggleEdit(){
+  function setEditSection(section){
+    const next = ["basics","recipe","more"].includes(section) ? section : "basics";
+    state.editSection = next;
+
+    document.querySelectorAll(".editTab").forEach(btn=>{
+      const active = btn.dataset.section === next;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", String(active));
+      btn.tabIndex = active ? 0 : -1;
+    });
+
+    document.querySelectorAll(".editSection").forEach(panel=>{
+      const active = panel.id === `editSection-${next}`;
+      panel.classList.toggle("show", active);
+      panel.hidden = !active;
+    });
+  }
+
+  function openEditPanel({ section = "basics", focusId = null, restoreFocusFrom = null } = {}){
     if(!requireOwnerAction()) return;
     const r = getSelected();
     if(!r) return;
 
-    state.editOpen = !state.editOpen;
-    $("editPanel").classList.toggle("show", state.editOpen);
-    $("editToggleBtn").textContent = state.editOpen ? "Close edit" : "Edit";
+    closeQuickTagPanel();
+    state.editReturnFocusId = restoreFocusFrom?.id || document.activeElement?.id || "editToggleBtn";
+    state.editOpen = true;
+    setEditSection(section);
+    $("viewer").classList.add("editing");
+    $("editScrim").classList.add("show");
+    $("editPanel").classList.add("show");
+    $("editPanel").setAttribute("aria-hidden", "false");
+    $("editToggleBtn").textContent = "Close edit";
+    fillEditForm(r);
 
-    if(state.editOpen){
-      fillEditForm(r);
-      setTimeout(()=> $("editPanel").scrollIntoView({behavior:"smooth", block:"start"}), 50);
+    const targetId = focusId || (section === "recipe" ? "eIngredients" : "eTitle");
+    setTimeout(()=>{
+      $(targetId)?.focus();
+      $(targetId)?.select?.();
+    }, 40);
+  }
+
+  function closeEditPanel({ restoreFocus = true } = {}){
+    state.editOpen = false;
+    $("viewer").classList.remove("editing");
+    $("editScrim").classList.remove("show");
+    $("editPanel").classList.remove("show");
+    $("editPanel").setAttribute("aria-hidden", "true");
+    $("editToggleBtn").textContent = "Edit";
+    $("editTagSearch").value = "";
+
+    if(restoreFocus){
+      const focusId = state.editReturnFocusId || "editToggleBtn";
+      setTimeout(()=> $(focusId)?.focus(), 20);
     }
+  }
+
+  function toggleEdit(){
+    if(state.editOpen){
+      closeEditPanel();
+      return;
+    }
+    openEditPanel({ section: state.editSection || "basics", restoreFocusFrom: $("editToggleBtn") });
   }
 
   async function saveEdit(){
@@ -2835,6 +3482,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     renderGrid();
     renderViewer();
     refreshEditSuggestions();
+    closeEditPanel({ restoreFocus:false });
     toast("saved locally");
 
   }
@@ -2954,10 +3602,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     refreshFilterOptions();
     renderGrid();
     openViewer(saved.id);
-    state.editOpen = true;
-    $("editPanel").classList.add("show");
-    $("editToggleBtn").textContent = "Close edit";
-    fillEditForm(saved);
+    openEditPanel({ section:"basics", focusId:"eTitle", restoreFocusFrom:$("newBtn") });
     toast("new recipe");
   }
 
@@ -3007,10 +3652,7 @@ async function compressImageFile(file, maxDim=1600, quality=0.72){
     renderGrid();
 
     openViewer(saved.id);
-    state.editOpen = true;
-    $("editPanel").classList.add("show");
-    $("editToggleBtn").textContent = "Close edit";
-    fillEditForm(saved);
+    openEditPanel({ section:"basics", focusId:"eTitle", restoreFocusFrom:$("newBtn") });
 
     toast("opened draft from share");
   }
@@ -3322,19 +3964,26 @@ function printCard(){
 
 
 
-  /* Groceries export (Apple Reminders-friendly) */
-  function groceriesLines(r){
+  /* Ingredient export (mobile-friendly and scaled) */
+  function ingredientExportLines(r, { includeTitle = false } = {}){
+    const factor = state.scaleFactor || 1;
     const lines = parseIngredientLines(r.ingredients)
       .filter(l => !l.startsWith("## "))
+      .map(l => scaleIngredientLine(l, factor))
       .map(l => l.replace(/^[-*•]\s+/, "").trim())
       .filter(Boolean);
-    return lines;
+
+    if(!includeTitle) return lines;
+
+    const out = [r.title || "Recipe", ""];
+    out.push(...lines);
+    return out;
   }
 
   async function copyGroceries(){
     const r = getSelected();
     if(!r) return;
-    const lines = groceriesLines(r);
+    const lines = ingredientExportLines(r);
     const text = lines.join("\n");
     if(!text){
       toast("no ingredients to copy");
@@ -3342,23 +3991,23 @@ function printCard(){
     }
     try{
       await navigator.clipboard.writeText(text);
-      toast("copied groceries");
-      showSnack("Copied ingredients (paste into Reminders)", null);
+      toast("copied ingredients");
+      showSnack("Copied scaled ingredients for Notes or Reminders", null);
     }catch{
       // fallback: prompt
-      window.prompt("Copy groceries:", text);
+      window.prompt("Copy ingredients:", text);
     }
   }
 
   function downloadGroceriesTxt(){
     const r = getSelected();
     if(!r) return;
-    const lines = groceriesLines(r);
-    const text = lines.join("\n");
-    if(!text){
+    const plainLines = ingredientExportLines(r);
+    if(!plainLines.length){
       toast("no ingredients to download");
       return;
     }
+    const text = ingredientExportLines(r, { includeTitle:true }).join("\n");
     const blob = new Blob([text], {type:"text/plain"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -3570,11 +4219,7 @@ function importRecipeFromPastedText(raw){
   renderGrid();
   openViewer(r.id);
 
-  // Auto-open edit so you can clean up anything
-  state.editOpen = true;
-  $("editPanel").classList.add("show");
-  $("editToggleBtn").textContent = "Close edit";
-  fillEditForm(r);
+  openEditPanel({ section:"recipe", focusId:"eIngredients", restoreFocusFrom:$("pasteRecipeActionBtn") });
 
   toast("pasted recipe imported");
   return r;
@@ -3684,15 +4329,12 @@ function openDraftInEditor(recipe, { origin = null } = {}){
   state.draftRecipe = { ...recipe };
   state.draftOrigin = origin;
   state.selectedId = recipe.id;
-  state.editOpen = true;
   state.scaleFactor = 1;
   state.baseServings = null;
   $("scaleServingsTarget").value = "";
-  $("editPanel").classList.add("show");
-  $("editToggleBtn").textContent = "Close edit";
   renderViewer();
   showViewer(true);
-  fillEditForm(state.draftRecipe);
+  openEditPanel({ section:"basics", focusId:"eTitle", restoreFocusFrom:$("editToggleBtn") });
   return state.draftRecipe;
 }
 
@@ -4171,14 +4813,36 @@ const importMenuEl = document.getElementById("importMenu");
 document.addEventListener("pointerdown", (e)=>{
   if(advMenuEl?.open && !advMenuEl.contains(e.target)) closeAdvancedMenu();
   if(importMenuEl?.open && !importMenuEl.contains(e.target)) closeImportMenu();
+  const exportMenu = getViewerExportMenu();
+  if(exportMenu?.open && !exportMenu.contains(e.target)) closeViewerExportMenu();
 }, true);
 
-// Close menus on Escape
+// Global Escape closes app-level menus/modals, but never the recipe page itself.
 window.addEventListener("keydown", (e)=>{
   if(e.key !== "Escape") return;
-  if(advMenuEl?.open) closeAdvancedMenu();
-  if(importMenuEl?.open) closeImportMenu();
-  closeImportUrlModal();
+  let handled = false;
+  if(advMenuEl?.open){
+    closeAdvancedMenu();
+    handled = true;
+  }
+  if(importMenuEl?.open){
+    closeImportMenu();
+    handled = true;
+  }
+  if(viewerExportMenuIsOpen()){
+    closeViewerExportMenu();
+    handled = true;
+  }
+  const importUrlModal = $("importUrlModal");
+  if(importUrlModal?.classList.contains("show")){
+    closeImportUrlModal();
+    handled = true;
+  }
+  if(handled){
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return;
+  }
 });
 
 window.addEventListener("hashchange", syncViewerToRoute);
@@ -4357,10 +5021,12 @@ Normal edits auto-sync.`;
 
 
     // Viewer buttons
-    $("overlay").onclick = closeViewer;
-    $("backBtn").onclick = closeViewer;
+    $("overlay").onclick = ()=>{ dismissViewerSubpanel(); };
+    $("backBtn").onclick = exitRecipePage;
     $("editToggleBtn").onclick = toggleEdit;
-    $("cancelEditBtn").onclick = toggleEdit;
+    $("cancelEditBtn").onclick = ()=> closeEditPanel();
+    $("closeEditBtn").onclick = ()=> closeEditPanel();
+    $("editScrim").onclick = ()=> closeEditPanel();
     $("saveEditBtn").onclick = saveEdit;
 
     // --- Image upload (Firebase Storage) ---
@@ -4487,20 +5153,88 @@ const out = await window.FB.uploadRecipeImage({
     }
 
 // Live-filter suggestions as you type in edit fields
-["eCuisine","eDishType","eBase","eIngredient","eEquipment","eTags"].forEach(id=>{
+["eCuisine","eDishType","eBase","eIngredient","eEquipment"].forEach(id=>{
   const el = $(id);
   if(!el) return;
   el.addEventListener("input", refreshEditSuggestions);
   el.addEventListener("focus", refreshEditSuggestions);
 });
 
+$("editTagSearch")?.addEventListener("input", renderTagEditor);
+$("editTagSearch")?.addEventListener("focus", renderTagEditor);
+$("editTagSearch")?.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter" || e.key === ","){
+    e.preventDefault();
+    if(addEditTag($("editTagSearch").value)){
+      $("editTagSearch").value = "";
+    }
+    renderTagEditor();
+    return;
+  }
+
+  if(e.key === "Backspace" && !$("editTagSearch").value.trim()){
+    const tags = getEditTags();
+    if(!tags.length) return;
+    e.preventDefault();
+    setEditTags(tags.slice(0, -1));
+  }
+});
+
+$("quickTagsBtn")?.addEventListener("click", ()=>{
+  if(state.quickTagsOpen){
+    closeQuickTagPanel();
+    return;
+  }
+  openQuickTagPanel();
+});
+
+$("quickTagCancelBtn")?.addEventListener("click", ()=> closeQuickTagPanel());
+$("quickTagSaveBtn")?.addEventListener("click", saveQuickTags);
+$("quickTagSearch")?.addEventListener("input", renderQuickTagPanel);
+$("quickTagSearch")?.addEventListener("focus", renderQuickTagPanel);
+$("quickTagSearch")?.addEventListener("keydown", (e)=>{
+  if(e.key === "Enter" || e.key === ","){
+    e.preventDefault();
+    const wanted = canonicalTag($("quickTagSearch").value);
+    if(!wanted) return;
+    const current = canonicalList(state.quickTagDraft || []);
+    if(!current.some(x => x.toLowerCase() === wanted.toLowerCase())){
+      state.quickTagDraft = [...current, wanted];
+    }
+    $("quickTagSearch").value = "";
+    renderQuickTagPanel();
+    return;
+  }
+
+  if(e.key === "Backspace" && !$("quickTagSearch").value.trim()){
+    const tags = canonicalList(state.quickTagDraft || []);
+    if(!tags.length) return;
+    e.preventDefault();
+    state.quickTagDraft = tags.slice(0, -1);
+    renderQuickTagPanel();
+  }
+});
+
+document.querySelectorAll(".editTab").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const section = btn.dataset.section || "basics";
+    setEditSection(section);
+    const focusMap = {
+      basics: "eTitle",
+      recipe: "eIngredients",
+      more: "eSourceUrl"
+    };
+    setTimeout(()=> $(focusMap[section])?.focus(), 40);
+  });
+});
+
 
     $("markCookedBtn").onclick = markCooked;
     $("deleteBtn").onclick = deleteRecipe;
-    $("downloadOneBtn").onclick = downloadOne;
-    $("printBtn").onclick = printCard;
+    $("downloadOneBtn").onclick = ()=>{ downloadOne(); closeViewerExportMenu(); };
+    $("printBtn").onclick = ()=>{ printCard(); closeViewerExportMenu(); };
     $("copyGroceriesBtn").onclick = copyGroceries;
-    $("downloadGroceriesBtn").onclick = downloadGroceriesTxt;
+    $("downloadGroceriesBtn").onclick = ()=>{ downloadGroceriesTxt(); closeViewerExportMenu(); };
 
     // Master "check all" checkbox
     const master = $("toggleAllIngCb");
@@ -4575,16 +5309,20 @@ const out = await window.FB.uploadRecipeImage({
     // Snackbar undo
     $("snackUndo").onclick = () => { if(undoFn) undoFn(); hideSnack(); };
 
-    // ESC to close viewer on desktop
+    // ESC only closes local viewer subpanels, never the recipe page itself
     window.addEventListener("keydown", (e)=>{
       if(e.key==="Escape" && $("viewer").classList.contains("show")){
-        closeViewer();
+        if(dismissViewerSubpanel()){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
       }
     });
 
     setCloudStatus();
     renderGrid();
     refreshEditSuggestions();
+    renderTagEditor();
 
   }
 

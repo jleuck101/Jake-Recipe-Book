@@ -22,6 +22,10 @@
 - `syncAll()` still exists in `index.html` for manual push/import/restore paths and is dangerous legacy behavior.
 - Signed-out public read is enabled; edits remain owner-only.
 - Owner check currently falls back to email until owner UID is wired.
+- Recipe viewer interaction rules:
+  - `Escape` only closes local viewer subpanels such as edit/tag/export UI.
+  - overlay clicks only close local viewer subpanels.
+  - only the explicit `← Back to Recipes` button exits the recipe page.
 - Compatibility globals in use:
   - `window.FB`
   - `window.AUTH`
@@ -67,6 +71,8 @@
 - Avoid new globals unless needed for compatibility with the existing non-module script.
 - Preserve the current UI/layout unless the task explicitly changes it.
 - Keep routing unchanged unless the task explicitly asks for it.
+- Keep shared viewer/export/menu helpers top-level and shared; do not duplicate them in narrower scopes.
+- Do not reintroduce older viewer close-flow experiments unless the task explicitly asks for a behavior change.
 
 ## Local Run Notes
 - Frontend:

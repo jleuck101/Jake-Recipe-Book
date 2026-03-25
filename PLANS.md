@@ -14,6 +14,11 @@
 - Cleaned up old login-gate remnants.
 - Added verified hash-based per-recipe URLs/history.
 - Made recipe tiles real links for right-click and open-in-new-tab behavior.
+- Reworked recipe editing into a focused drawer inside the viewer instead of a long inline form.
+- Improved tag editing with searchable quick-picks and removable selected-tag chips.
+- Hardened cook mode against accidental exits and simplified viewer export actions.
+- Added scaled ingredient export improvements and quick tag editing from the main recipe view.
+- Cleaned up viewer close-flow helpers so subpanel dismissal and page exit are easier to reason about.
 
 ## Next Tasks
 - Wire owner UID and stop relying on email fallback.
